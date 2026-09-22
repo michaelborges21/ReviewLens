@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  quality:
+    name: Lint, tipos e testes (bloqueia)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src/
+      - run: uv run pytest -q          # sem chamadas reais a LLM (fakes)
+
+  llm-gates:
+    name: Eval smoke + red-team (bloqueia)
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Eval smoke
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python evals/run_evals.py --suite smoke --fail-under 0.9
+      - name: Red-team (injeção, SQL, PII)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: uv run python evals/run_evals.py --suite redteam --fail-under 1.0
+
+  ai-review:
+    name: Review por IA (não bloqueia)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Revise este PR contra specs/ e AGENTS.md. Comente apenas:
+            1) divergência da spec citada no PR;
+            2) prompt alterado sem bump de versão ou sem eval;
+            3) tool nova sem escopo de permissão (specs 04/05);
+            4) texto de review tratado como instrução (injeção indireta);
+            5) PII em log, resposta ou export;
+            6) número destinado a slide sem script reprodutível em reports/.
+            Ignore estilo e formatação (trabalho do ruff). Máximo 5 comentários,
+            cada um com arquivo, linha e correção sugerida. Não aprove nem reprove.
