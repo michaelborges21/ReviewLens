@@ -96,3 +96,8 @@ Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o
   Próximo passo: decidir ADR-008 e ADR-009; criar o andaime que o CI pressupõe
   (`Makefile`, `tests/`, `evals/`, deps de dev no `pyproject.toml`), hoje inexistente — a
   primeira PR nasce vermelha sem ele.
+- 2026-09-22 — Reforçada a seção 8 (Estilo) do `AGENTS.md` a pedido do Michael: código simples
+  e enxuto, sem abstração para caso hipotético; nomes humanos do domínio do livro/review, nunca
+  genéricos ou inventados; comentário curto só onde o código não fala por si, nunca parágrafo.
+  Vale para todo código escrito no projeto daqui pra frente, não é uma spec de módulo — por isso
+  entrou no `AGENTS.md` (documento transversal) e não em `specs/0N`.

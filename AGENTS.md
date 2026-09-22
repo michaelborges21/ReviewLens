@@ -42,7 +42,7 @@ O conjunto antigo em `specs/_archive/` **não é normativo** — só as specs li
 | `specs/DECISIONS.md` | registro de decisões (ADR) — sempre que mudar algo estrutural |
 
 ## 4. Stack (defaults — alteráveis via ADR)
-- Python 3.11+, gerenciado com `uv`. Lint/format: `ruff`. Tipos: `mypy --strict` em `src/`.
+- Python 3.12+, gerenciado com `uv`. Lint/format: `ruff`. Tipos: `mypy --strict` em `src/`.
 - Dados: `polars` (transformação) + `DuckDB` (camada analítica consultável por SQL).
 - NLP: `sentence-transformers` (embeddings), BM25 (`rank-bm25` ou FTS do DuckDB), reranker cross-encoder.
 - Vetores: `LanceDB` ou `Qdrant` local (ADR pendente).
@@ -102,9 +102,18 @@ specs/
 - Cache de chamadas LLM por hash (prompt_id + versão + input) para não pagar duas vezes.
 
 ## 8. Estilo
+> Projeto simples, não projeto "enterprise". Cada linha extra é uma linha que alguém vai ler
+> depois — só escreva se ela pagar essa leitura.
+- Código simples e enxuto: a solução mais direta que resolve o problema, sem camada extra
+  "para o futuro". Sem abstração, factory ou config para um único caso de uso.
 - Funções pequenas e puras onde possível; I/O nas bordas.
-- Nomes de negócio no código (`author_performance`, `interview_candidates`), não genéricos (`process_data`).
-- Código conta a história: módulo → docstring com "por que existe".
+- **Nomes humanos e do domínio do livro/review**, nunca genéricos nem inventados:
+  `author_performance`, `interview_candidates`, `helpful_ratio` — não `process_data`, `handler`,
+  `manager`, `utils`, `data2`. O nome sozinho já diz o que a variável, função, método ou classe
+  guarda ou faz; se precisar ler o corpo pra entender o nome, o nome está errado.
+- Comentário curto e direto só onde o código não fala por si (uma decisão não óbvia, um porquê).
+  Nunca parágrafo, nunca repetir em português o que a linha já diz em código.
+- Código conta a história: módulo → docstring de 1 linha com "por que existe", não "o que faz".
 - Commits convencionais (`feat:`, `fix:`, `docs(spec):`...).
 
 ## 9. Definição de pronto

@@ -3,7 +3,9 @@ csv/
 docs/
 .env
 .env.*
+!.env.example
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .venv
+.claude/settings.local.json
