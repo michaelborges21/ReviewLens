@@ -15,8 +15,16 @@ Dataset "Amazon Books Reviews" do Kaggle, duas tabelas — **schema confirmado e
 
 Limpeza:
 - Tipos corretos; timestamp unix → datetime.
-- HTML unescape, normalização de espaços; manter texto original em coluna separada.
-- Duplicatas exatas e quase-duplicatas (mesmo usuário + mesmo texto em edições diferentes).
+- HTML unescape (`&quot;` em 313k reviews). **Sem normalização de espaços e sem coluna de texto
+  original**: medi zero espaços duplos e zero tags em 3M de reviews, e o texto pré-unescape já
+  está preservado em `data/interim/` — duplicar a maior coluna da base não se paga.
+- **Duplicatas: ~25% da base.** 3.000.000 → 2.239.998. (Deduplicar o texto cru daria 2.240.168;
+  como o unescape roda **antes**, 170 pares que só diferiam na codificação HTML colidem e se
+  juntam — é o mesmo conteúdo, devem mesmo colapsar.) Chaves diferentes por grupo, de
+  propósito: `(user_id, review_text)` para identificados (remove 751.142) e
+  `(book_id, review_text)` para anônimos (remove 8.690). Tratar os `user_id` nulos como um
+  usuário só colapsaria 175.412 reviews anônimas distintas. A linha canônica é o menor
+  `review_id` do grupo, e `review_editions` guarda todas as edições que a review cobria.
 - Join por título é frágil (títulos repetidos/edições): documentar taxa de match e estratégia.
 - Listas em string (autores, categorias) → arrays normalizados; tabela `book_authors`.
 - `user_id` pseudonimizado (hash com salt em `.env`) na camada processed. `profileName` só na raw.

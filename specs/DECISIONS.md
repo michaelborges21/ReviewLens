@@ -113,3 +113,18 @@ Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o
   eram ancorados, então ignoravam qualquer diretório com esse nome em qualquer nível — inclusive
   `src/bri/data/`, o pacote Python recém-criado, que por isso nunca apareceria no `git status`.
   Corrigido para `/data/` e `/docs/` (só a raiz).
+- 2026-09-22 — Camada `processed` (spec 01): `src/bri/data/process.py` carrega `reviews`,
+  `books`, `book_authors` e `review_editions` no DuckDB. Medido antes de desenhar: ~25% da base
+  é duplicação (3M → ~2,24M), quase toda ela a mesma review replicada entre edições do mesmo
+  livro. Decidido remover mantendo `review_editions` (review canônica → todos os `book_id`), em
+  vez de remover sem rastro ou de marcar com flag — flag faria todo consumidor lembrar de
+  filtrar, e quem esquecesse inflaria o número em silêncio. Dedup usa chaves distintas para
+  identificados e anônimos porque tratar `user_id` nulo como um usuário só colapsaria 175.412
+  reviews anônimas legítimas. Duas divergências da spec 01 propostas e aceitas: não normalizar
+  espaços (zero espaços duplos e zero tags medidos em 3M de reviews) e não duplicar o texto
+  original em coluna separada (o pré-unescape já vive em `data/interim/`). `users_agg`,
+  `author_stats` e `genre_stats` ficam para o incremento de EDA, onde serão usadas de fato.
+  `empty_as_null=True` fixado explicitamente no `explode` de `montar_book_authors`: hoje uma
+  lista de autores vazia explode para nulo e é descartada, mas o Polars 2.0 inverte esse default
+  e os 31.413 livros sem autor passariam a gerar par em `book_authors`. Cheguei a fixar isso no
+  `read_csv` da ingestão por engano — o parâmetro não existe lá, e o `mypy --strict` pegou.

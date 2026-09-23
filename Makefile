@@ -12,6 +12,7 @@ check:
 
 data:
 	uv run python -m bri.data.ingest
+	uv run python -m bri.data.process
 
 enrich:
 	@echo "ainda não implementado — ver specs/02-nlp-pipeline.md"; exit 1
