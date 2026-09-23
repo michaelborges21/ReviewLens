@@ -1,4 +1,4 @@
-"""Amostra estratificada para o enriquecimento: mais sinal de aspecto por dólar gasto."""
+"""Amostra estratificada para o enriquecimento: mais sinal de aspecto por real gasto."""
 
 from pathlib import Path
 
@@ -8,6 +8,7 @@ from bri.data.process import BANCO
 from bri.llm import custo
 
 RELATORIO = Path("reports/sampling.md")
+PROMPT_EXTRACAO = Path("src/bri/prompts/extract_review.md")
 SEED = 42
 TOP_GENEROS = 8
 
@@ -17,6 +18,17 @@ TOP_GENEROS = 8
 PESOS = {"baixa(1-2)": 2, "media(3)": 3, "alta(4-5)": 1}
 
 Celula = tuple[str, str, str]
+
+
+def formatar_numero(valor: float, casas: int = 0) -> str:
+    """Padrão brasileiro: milhar com ponto, decimal com vírgula."""
+    inteiro, _, decimal = f"{valor:,.{casas}f}".partition(".")
+    inteiro = inteiro.replace(",", ".")
+    return f"{inteiro},{decimal}" if decimal else inteiro
+
+
+def formatar_reais(valor: float) -> str:
+    return f"R$ {formatar_numero(valor, 2)}"
 
 
 def preparar_estratos(con: duckdb.DuckDBPyConnection, top_generos: int = TOP_GENEROS) -> None:
@@ -118,9 +130,11 @@ def escrever_relatorio(
     media = con.execute("SELECT avg(length(review_text)) FROM reviews").fetchone()
     assert media is not None
     caracteres_medios = int(media[0])
-    entrada = custo.overhead_do_prompt(
-        Path("src/bri/prompts/extract_review.md"), caracteres_medios
-    ) + custo.tokens_de(caracteres_medios)
+    prefixo = custo.overhead_do_prompt(PROMPT_EXTRACAO, caracteres_medios)
+    tokens_review = custo.tokens_de(caracteres_medios)
+    entrada = prefixo + tokens_review
+    few_shot = 3 * (tokens_review + custo.TOKENS_SAIDA_POR_REVIEW)
+    cotacao, procedencia = custo.cotacao_usd_brl()
 
     por_faixa_base: dict[str, int] = {}
     for (faixa, _, _), n in grade.items():
@@ -131,6 +145,9 @@ def escrever_relatorio(
 
     total_base = sum(por_faixa_base.values())
     total_amostra = sum(por_faixa_amostra.values())
+
+    def em_reais(valor_usd: float) -> str:
+        return formatar_reais(custo.para_reais(valor_usd, cotacao))
 
     linhas = [
         "# Amostragem para o enriquecimento (spec 01 · spec 02)",
@@ -145,8 +162,9 @@ def escrever_relatorio(
     for faixa in ("baixa(1-2)", "media(3)", "alta(4-5)"):
         b, a = por_faixa_base.get(faixa, 0), por_faixa_amostra.get(faixa, 0)
         linhas.append(
-            f"| {faixa} | {b:,} | {100 * b / total_base:.1f}% | {a:,} | "
-            f"{100 * a / total_amostra:.1f}% | {PESOS[faixa]}× |"
+            f"| {faixa} | {formatar_numero(b)} | {formatar_numero(100 * b / total_base, 1)}% "
+            f"| {formatar_numero(a)} | {formatar_numero(100 * a / total_amostra, 1)}% "
+            f"| {PESOS[faixa]}× |"
         )
     linhas += [
         "",
@@ -155,45 +173,79 @@ def escrever_relatorio(
         "H2), logo rendem mais aspecto por chamada paga. Quem extrapolar estatística da amostra",
         "para a base inteira precisa corrigir essa calibragem.",
         "",
-        f"Células na grade (faixa × período × gênero): **{len(grade)}**, das quais",
-        f"**{len(alocacao)}** receberam cota. Gêneros fora do top {TOP_GENEROS} caem em `outros`;",
-        "reviews de livro sem categoria caem em `sem_genero`, em vez de sumirem da amostra.",
+        f"Células na grade (faixa × período × gênero): **{formatar_numero(len(grade))}**, das",
+        f"quais **{formatar_numero(len(alocacao))}** receberam cota. Gêneros fora do top",
+        f"{TOP_GENEROS} caem em `outros`; reviews de livro sem categoria caem em `sem_genero`,",
+        "em vez de sumirem da amostra. As células menores ficam com cotas de poucas dezenas de",
+        "reviews: a grade serve para espalhar cobertura, não para sustentar inferência por",
+        "célula.",
         "",
-        "## Custo estimado por modelo",
+        "## Custo estimado",
         "",
-        f"Base da conta: {caracteres_medios} caracteres médios por review, mais o gabarito do",
-        f"prompt e 3 exemplos few-shot → **~{entrada:,} tokens de entrada** e",
-        f"~{custo.TOKENS_SAIDA_POR_REVIEW} de saída por review.",
+        f"> **Câmbio usado: US$ 1,00 = {formatar_reais(cotacao)}** ({procedencia}).",
+        "> A Anthropic cobra em dólar; os valores abaixo já estão convertidos. Defina a variável",
+        "> de ambiente `USD_BRL` para recalcular com o câmbio do dia.",
         "",
-        "> Estimativa por heurística (~4 caracteres/token), margem de 15-20%. A contagem exata",
-        "> exige o tokenizador do provider, que a ADR-004 ainda não escolheu.",
+        f"Base da conta: {formatar_numero(caracteres_medios)} caracteres médios por review, mais",
+        f"o gabarito do prompt e 3 exemplos few-shot → **{formatar_numero(entrada)} tokens de",
+        f"entrada** e {formatar_numero(custo.TOKENS_SAIDA_POR_REVIEW)} de saída por chamada.",
         "",
-        f"Custo da amostra atual ({total_amostra:,} reviews):",
+        "> Estimativa por heurística (~4 caracteres por token), margem de 15% a 20%. A contagem",
+        "> exata exige o tokenizador do provider, que a ADR-004 ainda não escolheu.",
+        "",
+        f"Custo da amostra atual ({formatar_numero(total_amostra)} reviews):",
         "",
         "| modelo | custo |",
         "|---|---|",
     ]
     for modelo in custo.MODELOS:
-        linhas.append(
-            f"| {modelo.nome} | US$ {custo.estimar_custo(total_amostra, entrada, modelo):,.2f} |"
-        )
+        valor = custo.estimar_custo(total_amostra, entrada, modelo)
+        linhas.append(f"| {modelo.nome} | {em_reais(valor)} |")
+
     linhas += [
         "",
-        "Quantas reviews cabem em cada teto de gasto:",
+        "### A conta é dominada pelos exemplos, não pelas reviews",
         "",
-        "| modelo | " + " | ".join(f"US$ {t:,.0f}" for t in custo.TETOS_USD) + " |",
-        "|---" * (len(custo.TETOS_USD) + 1) + "|",
+        f"Dos {formatar_numero(entrada)} tokens de entrada por chamada,",
+        f"**{formatar_numero(few_shot)} são os 3 exemplos few-shot**",
+        f"({formatar_numero(100 * few_shot / entrada)}%), {formatar_numero(prefixo - few_shot)}",
+        f"são o gabarito do prompt e apenas **{formatar_numero(tokens_review)}",
+        f"({formatar_numero(100 * tokens_review / entrada)}%) são a review a ser analisada**.",
+        "Gabarito e exemplos são idênticos em toda chamada, ou seja, prefixo estável de",
+        f"{formatar_numero(prefixo)} tokens — candidato direto a cache de prompt:",
+        "",
+        "| modelo | sem cache | com cache | economia |",
+        "|---|---|---|---|",
+    ]
+    for modelo in custo.MODELOS:
+        sem = custo.estimar_custo(total_amostra, entrada, modelo)
+        com = custo.estimar_custo_com_cache(total_amostra, prefixo, tokens_review, modelo)
+        economia = formatar_numero(100 * (1 - com / sem))
+        linhas.append(f"| {modelo.nome} | {em_reais(sem)} | {em_reais(com)} | {economia}% |")
+
+    linhas += [
+        "",
+        "**Isso reenquadra a ADR-004:** com cache, o Sonnet 5 custa praticamente o mesmo que o",
+        "Haiku 4.5 sem cache. A alavanca compra um degrau de modelo pelo mesmo dinheiro, e vale",
+        "decidir o cache antes de decidir o provider.",
+        "",
+        "Quantas reviews cabem em cada teto de gasto (sem cache):",
+        "",
+        "| modelo | " + " | ".join(formatar_reais(t) for t in custo.TETOS_BRL) + " |",
+        "|---" * (len(custo.TETOS_BRL) + 1) + "|",
     ]
     for modelo in custo.MODELOS:
         cabem = " | ".join(
-            f"{custo.tamanho_por_teto(teto, entrada, modelo):,}" for teto in custo.TETOS_USD
+            formatar_numero(custo.tamanho_por_teto(teto / cotacao, entrada, modelo))
+            for teto in custo.TETOS_BRL
         )
         linhas.append(f"| {modelo.nome} | {cabem} |")
+
     linhas += [
         "",
-        "Enriquecer a base inteira está fora de cogitação: são 1.773.128.911 caracteres, da",
-        "ordem de 440 milhões de tokens só de entrada. A cobertura total é problema da",
-        "destilação (spec 07), treinada justamente sobre esta amostra.",
+        "Enriquecer a base inteira está fora de cogitação: são",
+        "1.773.128.911 caracteres, da ordem de 440 milhões de tokens só de entrada. A cobertura",
+        "total é problema da destilação (spec 07), treinada justamente sobre esta amostra.",
         "",
         "`make enrich` continua bloqueado até a ADR-004 ser decidida e este custo, aprovado.",
         "",

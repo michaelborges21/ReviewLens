@@ -6,10 +6,26 @@ import pytest
 from bri.nlp.sampling import (
     Celula,
     alocar_amostra,
+    formatar_numero,
+    formatar_reais,
     montar_grade,
     preparar_estratos,
     sortear,
 )
+
+
+def test_formata_numero_no_padrao_brasileiro() -> None:
+    """Milhar com ponto e decimal com vírgula — 1,784 em português seria um decimal."""
+    assert formatar_numero(1784) == "1.784"
+    assert formatar_numero(1_773_128_911) == "1.773.128.911"
+    assert formatar_numero(19.2, 1) == "19,2"
+    assert formatar_numero(0) == "0"
+
+
+def test_formata_reais() -> None:
+    assert formatar_reais(332.9) == "R$ 332,90"
+    assert formatar_reais(1234.5) == "R$ 1.234,50"
+    assert formatar_reais(1_000_000) == "R$ 1.000.000,00"
 
 
 @pytest.fixture
