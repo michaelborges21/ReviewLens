@@ -27,7 +27,35 @@ Alternativas: pandas em memória (sem SQL auditável), Postgres (overhead desnec
 Status: proposta — loop explícito vs LangGraph. Decidir no início da F2.
 
 ### ADR-004 — Provider de LLM
-Status: proposta — local (Ollama) para iteração vs API comercial para rodada final. Decidir por eval + custo.
+Status: **aceita** — `gemma4:12b` local, via Ollama.
+Contexto: o Michael não tem chave de API e não quer pagar por token. A pergunta virou outra: um
+modelo local dá conta da extração de aspectos, ou a tarefa exige modelo grande? Medido, não
+estimado — 6 reviews reais da amostra, 3 modelos, com schema forçado e thinking desligado:
+
+| modelo | evidência literal | aspectos/review | tam. evidência | tempo | amostra 19.949 |
+|---|---|---|---|---|---|
+| gemma4:12b | **100%** | 2,2 | 33 car | 4,3s | 23,6h |
+| qwen2.5vl:7b | 83% | 3,3 | 52 car | 3,3s | 18,4h |
+| qwen3:14b | 67% | 4,0 | 58 car | 5,5s | 30,6h |
+
+Decisão: `gemma4:12b`. Único com 100% de evidência literal — a validação anti-alucinação que a
+spec 02 trata como crítica — e com evidências curtas, como a spec pede ("trecho literal curto").
+Padrão observado que motivou descartar os outros: **quanto mais aspectos o modelo extrai, mais
+erra a evidência**. O qwen3 bate no teto de 4 aspectos e cai para 67% — está forçando aspectos
+marginais e parafraseando para justificá-los. Precisão vale mais que volume aqui, porque aspecto
+inventado polui a estatística agregada de forma invisível.
+Alternativas descartadas: API comercial (R$ 332,89 na amostra, sem ganho demonstrado e sem chave
+disponível); qwen2.5vl:7b (83% de evidência); qwen3:14b (67%).
+Consequências:
++ custo zero e sem chave de API — o gate de aprovação de custo da spec 02 deixa de ser bloqueio
++ 23,6h para a amostra completa é factível em execução noturna, com o checkpoint retomável que a
+  spec 02 já exige
+− depende desta máquina e da GPU; não roda em runner sem GPU (ver ADR-008)
+− 6 reviews é amostra pequena: serve para descartar o qwen3 e apontar o gemma4, **não substitui**
+  o golden set de 200 reviews rotuladas da spec 06
+− **três alavancas são obrigatórias, não opcionais**: enum listado no prompt, JSON Schema no
+  `format` do Ollama e `think: false`. Sem elas o mesmo gemma4 caiu para 33% de enum correto e
+  50,4s por review — 7,8× mais lento. Quem mexer no provider precisa preservar as três.
 
 ### ADR-005 — Vector store
 Status: proposta — LanceDB vs Qdrant.
@@ -69,7 +97,16 @@ Opções:
   (c) híbrido — red-team (30 casos, crítico) no CI comercial; `eval-smoke` completo só local.
 Pendente também: o CI roda `llm-gates` em toda PR, enquanto a spec 09 restringe a PRs que tocam
 `src/bri/{prompts,agent,guardrails}` — falta filtro `paths:`, senão PR de documentação paga eval.
-Decidir antes da primeira PR que toque prompt.
+Decisão (aceita): **opção (b) — o gate sai do CI e roda local**, `make eval-smoke` antes do
+merge. A ADR-004 mudou a premissa: com o pipeline 100% local em `gemma4:12b`, o runner do GitHub
+não tem GPU e literalmente não consegue executar o modelo escolhido, e não há chave de API para a
+alternativa comercial. O CI fica com `ruff`, `mypy` e `pytest`, que não precisam de GPU.
+Consequências:
++ custo zero e nenhuma credencial em segredo de repositório
++ o job `llm-gates` sai do `ci.yml`, onde hoje quebraria (chama `evals/run_evals.py`, inexistente)
+− **perde-se a garantia automática**: o red-team passa a depender de disciplina humana, que é
+  exatamente o risco que a spec 09 aponta ao dizer que gate manual é fácil de esquecer. Mitigação
+  possível no futuro: hook de pre-push local rodando o red-team.
 
 ### ADR-009 — Formato dos arquivos de prompt
 Data: 2026-09-22 · Status: **proposta — decisão pendente**
@@ -185,3 +222,17 @@ Consequências:
   export, a referência estável deve ser um token do lado do servidor, nunca o identificador no
   HTML. Restrição operacional: o app abre o DuckDB em read-only e o DuckDB não aceita leitor
   e escritor no mesmo arquivo — `make data` com a aplicação no ar falha.
+- 2026-09-23 — ADR-004 e ADR-008 decididas, e ambas com medição em vez de estimativa. O Michael
+  não tem chave de API e não quer pagar por token, então a pergunta deixou de ser "qual provider
+  comercial" e virou "modelo local dá conta?". Piloto sobre reviews reais da amostra com os
+  modelos já presentes no Ollama desta máquina, mais o `qwen3:14b` baixado para o teste.
+  **Erro meu no primeiro piloto, que vale registrar**: julguei os três modelos pelo enum de
+  aspectos sem nunca ter listado o enum no prompt — os "33% de acerto" mediam o meu prompt, não a
+  capacidade deles. A ideia do Michael de "injetar um prompt contornando o problema" estava certa:
+  no v2, com três alavancas juntas (enum no prompt, JSON Schema no `format` do Ollama e
+  `think: false`), o `gemma4:12b` foi de 33% para 100% de enum e de 50,4s para 4,3s por review.
+  Escolhido o `gemma4:12b` por ser o único com 100% de evidência literal, com o padrão claro de
+  que quanto mais aspectos um modelo extrai, mais ele erra a evidência.
+  Consequência em cadeia: pipeline local + runner sem GPU = o gate de LLM sai do CI e vira local
+  (ADR-008), o que de quebra remove do `ci.yml` um job que hoje quebraria, por chamar
+  `evals/run_evals.py`, que nunca existiu.

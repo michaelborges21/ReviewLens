@@ -23,23 +23,9 @@ jobs:
       - run: uv run mypy src/
       - run: uv run pytest -q          # sem chamadas reais a LLM (fakes)
 
-  llm-gates:
-    name: Eval smoke + red-team (bloqueia)
-    runs-on: ubuntu-latest
-    needs: quality
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen
-      - name: Eval smoke
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run python evals/run_evals.py --suite smoke --fail-under 0.9
-      - name: Red-team (injeção, SQL, PII)
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: uv run python evals/run_evals.py --suite redteam --fail-under 1.0
+  # O job llm-gates foi removido pela ADR-008: exigia GPU que o runner não tem (o modelo do
+  # projeto é gemma4:12b local) e uma chave de API que o projeto não usa. eval-smoke e red-team
+  # rodam localmente, antes do merge.
 
   ai-review:
     name: Review por IA (não bloqueia)

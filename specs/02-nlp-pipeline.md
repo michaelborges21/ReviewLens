@@ -36,7 +36,13 @@ Tudo que pode ser **pré-computado** é pré-computado. O agente consulta result
 ## Custo e execução
 - Antes de `make enrich`: script imprime nº de chamadas, tokens estimados, custo estimado e tempo. Execução só após aprovação (HITL).
 - Batch API quando disponível; cache por hash; retomável (checkpoint por lote).
-- Alternativa local (Ollama) para iteração barata de prompts; modelo comercial para rodada final, se a qualidade justificar (decidir via eval).
+- **Execução local em `gemma4:12b` via Ollama (ADR-004)** — custo zero, sem chave de API. A
+  estimativa de custo em dinheiro deixa de ser bloqueio; o que importa agora é **tempo**: ~4,3s
+  por review, ~23,6h para as 19.949 da amostra. Daí o checkpoint retomável ser obrigatório, não
+  opcional.
+- Três ajustes medidos como obrigatórios: as 9 categorias listadas no prompt, JSON Schema no
+  `format` do Ollama (restringe a decodificação — torna enum inválido impossível) e
+  `think: false`. Sem eles: 33% de enum correto e 50,4s por review, contra 100% e 4,3s com eles.
 
 ## Saídas
 `review_enriched` (sentimento, aspectos, tópico), `entity_summaries`, `topics`.

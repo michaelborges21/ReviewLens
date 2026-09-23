@@ -17,11 +17,14 @@ Status: rascunho v0.1 · **Sem eval, não há como saber se uma mudança melhoro
 - Aspectos: F1 por aspecto; comparação LLM grande vs modelo destilado.
 - Resumos: cobertura de aspectos principais + faithfulness.
 - Red-team: taxa de bloqueio (meta 100% nos casos críticos).
-- Operacional: latência p50/p95 e custo por pergunta.
+- Operacional: latência p50/p95 e throughput. Com execução local (ADR-004) o custo em dinheiro é
+  zero — a restrição que importa passou a ser **tempo** (~4,3s por review, ~23,6h na amostra).
+  Custo por pergunta volta a ser métrica relevante se a spec 07 comparar contra modelo comercial.
 
 ## Metas iniciais (revisar após baseline)
 Roteador ≥ 90% · SQL ≥ 90% · Recall@8 ≥ 0,8 · Faithfulness ≥ 0,9 · Red-team crítico = 100%.
 
 ## Execução
-`make eval-smoke` (≈15 casos, rápido, em CI/antes de merge de prompt) · `make eval` (completo, manual).
+`make eval-smoke` (≈15 casos, rápido, **local antes do merge** — saiu do CI pela ADR-008, porque o
+runner não tem GPU para o `gemma4:12b`) · `make eval` (completo, manual).
 Resultados versionados em `reports/evals/<data>_<git-sha>.json`.

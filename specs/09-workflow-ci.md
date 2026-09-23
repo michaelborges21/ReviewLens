@@ -27,21 +27,32 @@ spec → plano → teste (falhando) → implementação → loop até verde → 
 ## 3. CI — quem bloqueia e quem opina
 LLM é não determinístico; **não pode ser gate de bloqueio**. Aprovar hoje e reprovar amanhã o mesmo código destrói a confiança no CI.
 
-| Papel | Quem | Bloqueia merge? |
-|---|---|---|
-| Gate obrigatório | ruff · mypy · pytest · `eval-smoke` · **red-team de injeção** | **Sim** |
-| Review qualitativo | Claude Action comentando no PR | Não — comenta |
+| Papel | Quem | Onde roda | Bloqueia merge? |
+|---|---|---|---|
+| Gate obrigatório (automático) | ruff · mypy · pytest | CI | **Sim** |
+| Gate obrigatório (manual) | `eval-smoke` · **red-team de injeção** | **local, antes do merge** | Sim, por disciplina |
+| Review qualitativo | Claude Action comentando no PR | CI | Não — comenta |
 
-O red-team como check obrigatório é o diferencial: o merge é reprovado se o agente voltar a ser vulnerável a instrução escondida dentro de uma review.
+O red-team continua sendo o diferencial: o merge não deve acontecer se o agente voltar a ser
+vulnerável a instrução escondida dentro de uma review.
+
+**Por que ele saiu do CI (ADR-008):** a ADR-004 escolheu `gemma4:12b` local, e o runner do GitHub
+não tem GPU — não consegue executar o modelo do projeto. Não há chave de API para a alternativa
+comercial. O gate passou a ser local, e com isso **deixou de ser automático**: depende de
+disciplina humana, que esta mesma spec aponta como frágil. Mitigação em aberto: hook de
+`pre-push` local rodando o red-team.
 
 ### Jobs
 | Job | Quando | Conteúdo |
 |---|---|---|
 | `quality` | todo PR | ruff, mypy, pytest (sem chamada real a LLM) |
-| `llm-gates` | PR que toca `src/bri/{prompts,agent,guardrails}` | `eval-smoke` + red-team, com LLM local ou modelo barato |
 | `ai-review` | PR aberto/atualizado | Claude Action; comenta, não bloqueia |
 
-**Custo**: disparar em `pull_request`, nunca em `push`. Segredos via GitHub Secrets; PR de fork não recebe segredo.
+O job `llm-gates` **foi removido do `ci.yml`** (ADR-008): exigia GPU que o runner não tem e uma
+chave de API que o projeto não usa mais. `eval-smoke` e red-team rodam localmente.
+
+**Custo**: disparar em `pull_request`, nunca em `push`. Com o pipeline local, o CI não precisa de
+nenhum segredo para os gates obrigatórios.
 
 ## 4. Escopo do review por IA
 Pedir ao revisor o que linter não pega:

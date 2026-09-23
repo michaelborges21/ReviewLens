@@ -46,7 +46,7 @@ O conjunto antigo em `specs/_archive/` **não é normativo** — só as specs li
 - Dados: `polars` (transformação) + `DuckDB` (camada analítica consultável por SQL).
 - NLP: `sentence-transformers` (embeddings), BM25 (`rank-bm25` ou FTS do DuckDB), reranker cross-encoder.
 - Vetores: `LanceDB` ou `Qdrant` local (ADR pendente).
-- LLM: camada de abstração `src/bri/llm/` com providers intercambiáveis (API comercial e local via Ollama).
+- LLM: **`gemma4:12b` local via Ollama** (ADR-004) — sem chave de API, sem custo por token. A camada `src/bri/llm/` mantém providers intercambiáveis, mas a rodada de enriquecimento é local. Obrigatório: enum no prompt + JSON Schema no `format` + `think: false`.
 - Schemas: `pydantic` v2 para TODA saída de LLM.
 - App de demo: `FastAPI` + Jinja2 + HTMX (ADR-010; substituiu Streamlit). Testes: `pytest`. Tracking de experimentos/prompts: `mlflow` ou arquivos em `reports/`.
 
