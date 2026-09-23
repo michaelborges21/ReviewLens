@@ -11,7 +11,7 @@ check:
 	uv run pytest -q
 
 data:
-	@echo "ainda não implementado — ver specs/01-data-eda.md"; exit 1
+	uv run python -m bri.data.ingest
 
 enrich:
 	@echo "ainda não implementado — ver specs/02-nlp-pipeline.md"; exit 1

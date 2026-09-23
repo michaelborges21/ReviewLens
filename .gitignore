@@ -1,6 +1,5 @@
-data/
-csv/
-docs/
+/data/
+/docs/
 .env
 .env.*
 !.env.example

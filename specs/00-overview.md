@@ -14,7 +14,8 @@ Analistas de uma editora exploram avaliações de livros manualmente. É lento, 
 
 ## Hipóteses iniciais (a validar na EDA — ver 01)
 - **H1** A nota média esconde problemas específicos; aspectos extraídos do texto revelam causas (ritmo, final, tradução, edição física).
-- **H2** Reviews longas e com alta taxa de utilidade (helpfulness) são as mais informativas → melhores candidatos a entrevista.
+- **H2** Reviews longas são as mais informativas (proxy de profundidade — a base não tem
+  helpfulness) → melhores candidatos a entrevista.
 - **H3** Gêneros diferem nos aspectos mais citados (ex.: técnicos → clareza; ficção → personagens).
 - **H4** Polarização de notas (bimodal) por livro/autor é sinal de risco ou de nicho engajado.
 - **H5** Há divergência entre nota e sentimento do texto em uma fração relevante das reviews.

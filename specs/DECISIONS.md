@@ -101,3 +101,15 @@ Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o
   genéricos ou inventados; comentário curto só onde o código não fala por si, nunca parágrafo.
   Vale para todo código escrito no projeto daqui pra frente, não é uma spec de módulo — por isso
   entrou no `AGENTS.md` (documento transversal) e não em `specs/0N`.
+- 2026-09-22 — Início da ingestão (spec 01). Confirmado o schema real dos CSVs (`data/raw/`):
+  `Books_rating.csv` não tem coluna de helpfulness, ao contrário do que a spec 01 assumia — spec
+  01 e a hipótese H2 (`specs/00-overview.md`) corrigidas para usar comprimento de texto como
+  proxy de profundidade, sem depender de helpfulness. Também não há id de review na fonte;
+  gerado sequencialmente na ingestão. Dados brutos, que estavam em `csv/` na raiz, movidos para
+  `data/raw/` (caminho que a spec 01 e os notebooks já esperavam); `csv/` removido do
+  `.gitignore` por não ter mais uso. Primeiro incremento de código é só `raw → interim`
+  (`src/bri/data/ingest.py`); carga em DuckDB (`processed`) fica para o próximo incremento.
+  De quebra, achado um bug no `.gitignore`: os padrões `data/` e `docs/` (sem `/` na frente) não
+  eram ancorados, então ignoravam qualquer diretório com esse nome em qualquer nível — inclusive
+  `src/bri/data/`, o pacote Python recém-criado, que por isso nunca apareceria no `git status`.
+  Corrigido para `/data/` e `/docs/` (só a raiz).
