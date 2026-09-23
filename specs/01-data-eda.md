@@ -46,7 +46,15 @@ Números reproduzíveis rodando `make data` e consultando `data/interim/*.parque
 - `description` nulo em 32%, `publisher` em 36%, `ratings_count` em 77% dos livros.
 
 ## Amostragem
-Base grande → etapas com LLM usam **amostra estratificada** (gênero × faixa de nota × período), seed fixa, tamanho justificado por custo. Documentar em `reports/sampling.md`.
+Base grande → etapas com LLM usam **amostra estratificada** (gênero × faixa de nota × período),
+seed fixa, tamanho justificado por custo. Gerada por `make sample`
+(`src/bri/nlp/sampling.py`), documentada em `reports/sampling.md`.
+
+A alocação **não é proporcional**: faixa média pesa 3, baixa pesa 2, alta pesa 1. Reviews da
+faixa média são as mais argumentadas (mediana de 645 caracteres contra 459 da nota 5 — achado de
+H2) e rendem mais aspecto por chamada paga. Livros sem categoria entram como `sem_genero`, em vez
+de sumirem da amostra. Quem extrapolar estatística da amostra para a base precisa corrigir essa
+calibragem deliberada.
 
 ## Checklist de EDA (cada item gera figura/tabela em `reports/`)
 - Volume por ano, gênero, autor; cauda longa de livros e usuários (H6).

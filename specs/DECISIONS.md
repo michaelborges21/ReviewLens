@@ -74,12 +74,15 @@ Decidir antes da primeira PR que toque prompt.
 ### ADR-009 — Formato dos arquivos de prompt
 Data: 2026-09-22 · Status: **proposta — decisão pendente**
 Contexto: `specs/05-prompts-guardrails.md` exige `src/bri/prompts/<nome>.yaml` com `id`, `version`,
-`model`, `system`, `template`, `output_schema` e `changelog`. No disco há três `.md` sem metadados.
-Consequência prática: o gate "prompt alterado sem bump de versão" — cobrado na spec 09 e no prompt
-do `ai-review` — não é verificável, nem por script nem pelo revisor IA, sem esses campos.
+`model`, `system`, `template`, `output_schema` e `changelog`.
+**Correção de 2026-09-22:** a versão anterior desta entrada afirmava que os três prompts eram
+`.md` "sem metadados". Estava errado — ao abri-los para a F1, os três têm front matter YAML com
+`version`, `used_by` e `schema`. Ou seja, a opção (b) abaixo **já está implementada** e o gate
+"prompt alterado sem bump de versão" é verificável hoje.
 Opções: (a) converter os três para `.yaml` conforme a spec; (b) manter `.md` com front matter YAML
 (legível para prompts longos, ainda parseável); (c) alterar a spec e abrir mão do gate automático.
-Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o gate.
+Decisão: **(b)**, que é o estado real do repositório. Resta alinhar a spec 05, que ainda pede
+`.yaml`, e completar os campos que faltam no front matter (`model`, `changelog`).
 
 ## Log de sessão
 <!-- AAAA-MM-DD — o que foi feito, decisão tomada, próximo passo -->
@@ -138,3 +141,15 @@ Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o
   argumenta é o público do meio. Logo, "melhor candidato a entrevista" não é o resenhista
   entusiasmado. Agregações vivem em SQL dentro do DuckDB (`src/bri/data/stats.py`) e são testadas
   contra banco em memória, em vez de reimplementadas em Python só para ficarem testáveis.
+- 2026-09-22 — Amostragem e custo (specs 01 e 02), para destravar a F1 sem gastar nada. A base
+  tem 1.773.128.911 caracteres, da ordem de 440 milhões de tokens só de entrada: enriquecer tudo
+  é inviável em qualquer modelo, e é por isso que a spec 02 usa amostra e deixa a cobertura
+  total para a destilação (spec 07). Decisões: (a) a estimativa é ancorada em **teto de gasto**,
+  derivando quantas reviews cabem por modelo — é o formato que a ADR-004 precisa para comparar
+  providers; (b) a alocação **sobre-amostra as faixas média e baixa** (pesos 3, 2 e 1), porque
+  reviews ponderadas e críticas citam mais aspecto concreto por chamada paga; a distorção fica
+  documentada em `reports/sampling.md` para quem extrapolar; (c) contagem de tokens por
+  heurística de ~4 caracteres/token, com margem de 15-20% — sem a ADR-004 não há provider, e sem
+  provider não há tokenizador correto; o `messages.count_tokens` exigiria justamente a credencial
+  e a decisão que este incremento existe para destravar. `make enrich` segue bloqueado até o
+  número ser aprovado.

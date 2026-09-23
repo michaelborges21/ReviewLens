@@ -1,4 +1,4 @@
-.PHONY: setup check data eda enrich index eval eval-smoke app
+.PHONY: setup check data eda sample enrich index eval eval-smoke app
 
 setup:
 	uv sync
@@ -17,6 +17,9 @@ data:
 
 eda:
 	uv run python -m bri.data.eda
+
+sample:
+	uv run python -m bri.nlp.sampling
 
 enrich:
 	@echo "ainda não implementado — ver specs/02-nlp-pipeline.md"; exit 1
