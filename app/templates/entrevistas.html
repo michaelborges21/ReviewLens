@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% set ativo = 'entrevistas' %}
+{% block titulo %}Entrevistas — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Candidatos a entrevista</h2>
+<p class="legenda">
+  Ranking explicável: as parcelas aparecem na tabela, não só a nota final. Leitores aparecem
+  sempre pseudonimizados.
+</p>
+
+<div class="pendente">
+  <strong>Score provisório.</strong> Sem os aspectos da F1, profundidade é aproximada pelo
+  tamanho do texto. A hipótese H2 mostrou que quem dá cinco estrelas escreve menos, então o
+  score penaliza nota extrema — leitores do meio da escala argumentam mais.
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>Leitor (pseudônimo)</th>
+      <th class="num">Avaliações</th>
+      <th class="num">Nota média</th>
+      <th class="num">Tamanho mediano</th>
+      <th class="num">Distância do meio</th>
+      <th>Aprovar</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for candidato in candidatos %}
+    <tr>
+      <td><code>{{ candidato.user_hash[:12] }}…</code></td>
+      <td class="num">{{ candidato.n_reviews }}</td>
+      <td class="num">{{ "%.2f"|format(candidato.nota_media) }}</td>
+      <td class="num">{{ candidato.comprimento_mediano | int }}</td>
+      <td class="num">{{ "%.2f"|format(candidato.distancia_do_meio) }}</td>
+      <td>
+        <form method="post" action="/entrevistas/aprovar"
+              hx-post="/entrevistas/aprovar" hx-swap="outerHTML">
+          {# Só o prefixo: o pseudônimo inteiro no DOM anularia o truncamento da tela. #}
+          <input type="hidden" name="prefixo" value="{{ candidato.user_hash[:12] }}">
+          <button class="discreto" type="submit">Aprovar</button>
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

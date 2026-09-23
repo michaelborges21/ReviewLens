@@ -48,7 +48,7 @@ O conjunto antigo em `specs/_archive/` **não é normativo** — só as specs li
 - Vetores: `LanceDB` ou `Qdrant` local (ADR pendente).
 - LLM: camada de abstração `src/bri/llm/` com providers intercambiáveis (API comercial e local via Ollama).
 - Schemas: `pydantic` v2 para TODA saída de LLM.
-- App de demo: `Streamlit`. Testes: `pytest`. Tracking de experimentos/prompts: `mlflow` ou arquivos em `reports/`.
+- App de demo: `FastAPI` + Jinja2 + HTMX (ADR-010; substituiu Streamlit). Testes: `pytest`. Tracking de experimentos/prompts: `mlflow` ou arquivos em `reports/`.
 
 ## 5. Comandos
 ```bash

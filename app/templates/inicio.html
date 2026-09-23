@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% set ativo = 'inicio' %}
+{% block titulo %}Visão geral — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Visão geral</h2>
+<p class="legenda">Base tratada e deduplicada, pronta para consulta.</p>
+
+<div class="cartoes">
+  <div class="cartao"><div class="valor">{{ "{:,}".format(numeros.reviews).replace(",", ".") }}</div><div class="rotulo">avaliações</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(numeros.livros).replace(",", ".") }}</div><div class="rotulo">livros</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(numeros.autores).replace(",", ".") }}</div><div class="rotulo">autores</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(numeros.generos).replace(",", ".") }}</div><div class="rotulo">gêneros</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(numeros.usuarios).replace(",", ".") }}</div><div class="rotulo">leitores</div></div>
+</div>
+
+<div class="pendente">
+  <strong>O que ainda não está aqui.</strong>
+  Aspectos citados, sentimento do texto, resumos por autor/gênero e respostas com citação
+  dependem do enriquecimento — specs 02 e 03, fase F1. As telas marcam esses pontos em vez de
+  preencher com estimativa.
+</div>
+
+<p>
+  A aba <a href="/autores">Autores</a> mostra lado a lado a nota simples e a bayesiana: por média
+  simples o ranking é liderado por quem tem uma única avaliação cinco estrelas.
+</p>
+{% endblock %}

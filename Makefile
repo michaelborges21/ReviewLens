@@ -5,8 +5,8 @@ setup:
 	uv run pre-commit install
 
 check:
-	uv run ruff check src tests
-	uv run ruff format --check src tests
+	uv run ruff check src tests app
+	uv run ruff format --check src tests app
 	uv run mypy src/
 	uv run pytest -q
 
@@ -34,4 +34,4 @@ eval-smoke:
 	@echo "ainda não implementado — ver specs/06-evals.md"; exit 1
 
 app:
-	@echo "ainda não implementado — ver specs/04-qa-agent.md"; exit 1
+	uv run uvicorn app.main:app --reload

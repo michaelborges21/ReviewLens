@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% set ativo = 'autores' %}
+{% block titulo %}{{ dados.autor }} — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>{{ dados.autor }}</h2>
+
+{% if dados.resumo %}
+<div class="cartoes">
+  <div class="cartao"><div class="valor">{{ dados.resumo.n_livros }}</div><div class="rotulo">livros</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(dados.resumo.n_reviews).replace(",", ".") }}</div><div class="rotulo">avaliações</div></div>
+  <div class="cartao"><div class="valor">{{ "%.2f"|format(dados.resumo.nota_media) }}</div><div class="rotulo">nota simples</div></div>
+  <div class="cartao"><div class="valor">{{ "%.3f"|format(dados.resumo.nota_bayesiana) }}</div><div class="rotulo">nota bayesiana</div></div>
+</div>
+{% else %}
+<p class="legenda">Autor não encontrado no catálogo.</p>
+{% endif %}
+
+<h3>Evolução por ano</h3>
+{% if dados.serie %}
+<table>
+  <thead><tr><th>Ano</th><th class="num">Avaliações</th><th class="num">Nota média</th></tr></thead>
+  <tbody>
+  {% for linha in dados.serie %}
+    <tr>
+      <td>{{ linha.ano }}</td>
+      <td class="num">{{ "{:,}".format(linha.n_reviews).replace(",", ".") }}</td>
+      <td class="num">{{ "%.2f"|format(linha.nota_media) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="legenda">Sem avaliações datadas para este autor.</p>
+{% endif %}
+
+<h3>Livros</h3>
+<table>
+  <thead><tr><th>Título</th><th class="num">Avaliações</th><th class="num">Nota média</th></tr></thead>
+  <tbody>
+  {% for linha in dados.livros %}
+    <tr>
+      <td>{{ linha.title }}</td>
+      <td class="num">{{ "{:,}".format(linha.n_reviews).replace(",", ".") }}</td>
+      <td class="num">{{ "%.2f"|format(linha.nota_media) if linha.nota_media is not none else "—" }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pendente">
+  <strong>Pendente da F1.</strong> O que os leitores elogiam ou criticam neste autor exige
+  extração de aspectos (spec 02).
+</div>
+{% endblock %}

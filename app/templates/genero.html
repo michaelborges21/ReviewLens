@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set ativo = 'generos' %}
+{% block titulo %}{{ dados.categoria }} — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>{{ dados.categoria }}</h2>
+
+{% if dados.resumo %}
+<div class="cartoes">
+  <div class="cartao"><div class="valor">{{ "{:,}".format(dados.resumo.n_livros).replace(",", ".") }}</div><div class="rotulo">livros</div></div>
+  <div class="cartao"><div class="valor">{{ "{:,}".format(dados.resumo.n_reviews).replace(",", ".") }}</div><div class="rotulo">avaliações</div></div>
+  <div class="cartao"><div class="valor">{{ "%.2f"|format(dados.resumo.nota_media) }}</div><div class="rotulo">nota média</div></div>
+</div>
+{% else %}
+<p class="legenda">Gênero não encontrado.</p>
+{% endif %}
+
+<h3>Distribuição de notas</h3>
+<table>
+  <thead><tr><th>Nota</th><th class="num">Avaliações</th></tr></thead>
+  <tbody>
+  {% for linha in dados.distribuicao %}
+    <tr>
+      <td>{{ linha.rating | int }}</td>
+      <td class="num">{{ "{:,}".format(linha.n).replace(",", ".") }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pendente">
+  <strong>Pendente da F1.</strong> Quais aspectos são mais citados neste gênero é a hipótese H3,
+  e depende da extração da spec 02.
+</div>
+{% endblock %}

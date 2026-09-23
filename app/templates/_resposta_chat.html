@@ -1,0 +1,21 @@
+{% if resposta %}
+<p{% if resposta.intencao.value == 'fora_de_escopo' %} class="recusa"{% endif %}>{{ resposta.texto }}</p>
+
+{% if resposta.dados %}
+<table>
+  <thead>
+    <tr>{% for coluna in resposta.dados[0].keys() %}<th>{{ coluna }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+  {% for linha in resposta.dados %}
+    <tr>{% for valor in linha.values() %}<td>{{ valor }}</td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if resposta.sql %}
+<p class="legenda" style="margin-top:14px">Consulta executada:</p>
+<div class="sql">{{ resposta.sql }}</div>
+{% endif %}
+{% endif %}

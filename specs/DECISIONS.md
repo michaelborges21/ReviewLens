@@ -84,6 +84,23 @@ Opções: (a) converter os três para `.yaml` conforme a spec; (b) manter `.md` 
 Decisão: **(b)**, que é o estado real do repositório. Resta alinhar a spec 05, que ainda pede
 `.yaml`, e completar os campos que faltam no front matter (`model`, `changelog`).
 
+### ADR-010 — FastAPI + Jinja2 + HTMX no lugar de Streamlit
+Data: 2026-09-23 · Status: aceita
+Contexto: o Michael quis ver a interface cedo para ir opinando, com o backend acompanhando.
+O `AGENTS.md` §4 e a spec 04 definiam Streamlit.
+Recomendei manter Streamlit: o ciclo de iteração visual é mais curto e não exige frontend
+separado. Ele optou por FastAPI, com frontend servido pelo próprio backend.
+Decisão: FastAPI servindo Jinja2, com HTMX como melhoria progressiva. Sem Node e sem build —
+os formulários funcionam sem JavaScript, e o HTMX só troca fragmentos quando está disponível.
+Alternativas descartadas: SPA em React/Vue (toolchain e build tornam cada ajuste visual lento,
+que é o oposto do objetivo); FastAPI só como API (não permite ver a interface).
+Consequências:
++ contrato explícito por rota — quando a tela muda, sabe-se qual rota muda
++ as mesmas consultas saem em JSON sob `/api`, reaproveitáveis
+− sem widgets prontos: mais código de tela escrito à mão
+− `app/` não é coberto pelo `mypy --strict`, que o `AGENTS.md` §4 restringe a `src/`; por isso a
+  lógica mora em `src/bri/` e `app/` fica fino
+
 ## Log de sessão
 <!-- AAAA-MM-DD — o que foi feito, decisão tomada, próximo passo -->
 - 2026-09-21 — Reorganização do repositório: specs consolidadas em português em `specs/`,
@@ -153,3 +170,18 @@ Decisão: **(b)**, que é o estado real do repositório. Resta alinhar a spec 05
   provider não há tokenizador correto; o `messages.count_tokens` exigiria justamente a credencial
   e a decisão que este incremento existe para destravar. `make enrich` segue bloqueado até o
   número ser aprovado.
+- 2026-09-23 — Interface web (ADR-010). `src/bri/data/consultas.py` (consultas somente-leitura),
+  `src/bri/agent/roteador.py` (classificação determinística de intenção, sem LLM) e `app/`
+  (FastAPI + Jinja2 + HTMX). O roteador **não usa `sqlglot`**: ele compõe consultas
+  parametrizadas a partir de filtros estruturados e nunca executa texto do usuário — a validação
+  AST da spec 04 é para o SQL escrito por LLM, que só aparece na F2. Dois defeitos meus achados
+  por teste durante a implementação: a resolução de entidade escolhia a palavra mais longa da
+  pergunta como nome, e em "desempenho do autor Herbert" procurava um autor chamado
+  "desempenho"; passou a testar todos os fragmentos contra o catálogo, ignorando palavras
+  genéricas. O segundo foi vazamento de PII: a tela de entrevistas truncava o pseudônimo na
+  exibição, mas mandava o hash **inteiro** no campo oculto do formulário de aprovação — bastava
+  ver o código-fonte da página. O formulário passou a enviar só o prefixo, e o campo foi
+  renomeado de `user_hash` para `prefixo`, que é o que ele de fato carrega. Quando a F3 trouxer
+  export, a referência estável deve ser um token do lado do servidor, nunca o identificador no
+  HTML. Restrição operacional: o app abre o DuckDB em read-only e o DuckDB não aceita leitor
+  e escritor no mesmo arquivo — `make data` com a aplicação no ar falha.

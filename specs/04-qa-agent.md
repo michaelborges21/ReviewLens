@@ -50,5 +50,12 @@ class Answer(BaseModel):
     follow_ups: list[str]          # sugestões de próximas perguntas
 ```
 
-## UI (Streamlit)
-Chat + painel lateral (filtros ativos, SQL executado, citações clicáveis) + aba de entrevistas com botão de aprovação.
+## UI (FastAPI + Jinja2 + HTMX — ADR-010)
+Chat + painel com SQL executado e citações clicáveis + aba de entrevistas com botão de aprovação.
+Páginas server-side; HTMX é melhoria progressiva, os formulários funcionam sem JavaScript. As
+mesmas consultas são expostas em JSON sob `/api`.
+
+Enquanto a F1/F2 não existem, o chat responde por **roteador determinístico só-SQL** (sem LLM):
+desempenho de autor, distribuição por gênero e números gerais. Fora disso, recusa dizendo o que
+falta — nunca responde com texto inventado. Telas marcam explicitamente o que depende do
+enriquecimento.

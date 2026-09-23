@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}ReviewLens{% endblock %}</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+  <script src="https://unpkg.com/htmx.org@2.0.3" defer></script>
+</head>
+<body>
+  <header>
+    <h1>ReviewLens <small>— inteligência sobre avaliações de livros</small></h1>
+    <nav>
+      <a href="/" class="{{ 'ativo' if ativo == 'inicio' }}">Visão geral</a>
+      <a href="/autores" class="{{ 'ativo' if ativo == 'autores' }}">Autores</a>
+      <a href="/generos" class="{{ 'ativo' if ativo == 'generos' }}">Gêneros</a>
+      <a href="/reviews" class="{{ 'ativo' if ativo == 'reviews' }}">Avaliações</a>
+      <a href="/entrevistas" class="{{ 'ativo' if ativo == 'entrevistas' }}">Entrevistas</a>
+      <a href="/chat" class="{{ 'ativo' if ativo == 'chat' }}">Perguntar</a>
+    </nav>
+  </header>
+  <main>
+    {% block conteudo %}{% endblock %}
+  </main>
+</body>
+</html>

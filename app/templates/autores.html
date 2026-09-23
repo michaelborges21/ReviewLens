@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set ativo = 'autores' %}
+{% block titulo %}Autores — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Autores</h2>
+<p class="legenda">
+  A nota bayesiana puxa quem tem pouco volume para a média global. Compare as ordenações: por
+  média simples, o topo é de autores com uma ou duas avaliações.
+</p>
+
+<form class="filtros" method="get" action="/autores">
+  <div>
+    <label for="ordenar_por">Ordenar por</label>
+    <select name="ordenar_por" id="ordenar_por">
+      <option value="bayesiana" {{ 'selected' if ordenar_por == 'bayesiana' }}>Nota bayesiana</option>
+      <option value="media" {{ 'selected' if ordenar_por == 'media' }}>Nota simples (enviesada)</option>
+      <option value="volume" {{ 'selected' if ordenar_por == 'volume' }}>Volume de avaliações</option>
+    </select>
+  </div>
+  <button type="submit">Aplicar</button>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th>Autor</th>
+      <th class="num">Livros</th>
+      <th class="num">Avaliações</th>
+      <th class="num">Nota simples</th>
+      <th class="num">Nota bayesiana</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for linha in autores %}
+    <tr>
+      <td><a href="/autores/{{ linha.author | urlencode }}">{{ linha.author }}</a></td>
+      <td class="num">{{ linha.n_livros }}</td>
+      <td class="num">{{ "{:,}".format(linha.n_reviews).replace(",", ".") }}</td>
+      <td class="num">{{ "%.2f"|format(linha.nota_media) if linha.nota_media is not none }}</td>
+      <td class="num">{{ "%.3f"|format(linha.nota_bayesiana) if linha.nota_bayesiana is not none }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

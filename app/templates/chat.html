@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set ativo = 'chat' %}
+{% block titulo %}Perguntar — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Perguntar</h2>
+<p class="legenda">
+  Hoje as respostas vêm de consulta SQL determinística, sem modelo de linguagem e sem custo.
+  Toda resposta mostra a consulta que a produziu.
+</p>
+
+<div class="chat-caixa">
+  <form method="post" action="/chat" hx-post="/chat" hx-target="#resposta" hx-swap="innerHTML">
+    <label for="pergunta">Sua pergunta</label>
+    <input type="text" name="pergunta" id="pergunta" style="width: 70%"
+           value="{{ pergunta }}" placeholder="ex.: desempenho do autor Tolkien">
+    <button type="submit">Perguntar</button>
+  </form>
+
+  <div id="resposta">
+    {% include "_resposta_chat.html" %}
+  </div>
+</div>
+
+<div class="pendente">
+  <strong>Pendente da F1 e F2.</strong> Perguntas sobre o que os leitores dizem — aspectos,
+  sentimento, resumos com citação — dependem do enriquecimento (spec 02) e do RAG (spec 03).
+  Preferi recusar com clareza a responder com texto inventado.
+</div>
+{% endblock %}

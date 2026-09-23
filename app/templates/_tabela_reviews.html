@@ -1,0 +1,15 @@
+{% if reviews %}
+<p class="legenda">{{ reviews | length }} avaliações exibidas.</p>
+{% for review in reviews %}
+<div class="review">
+  <div class="meta">
+    {{ review.title }} · nota {{ review.rating | int }} ·
+    {{ review.reviewed_at.strftime("%d/%m/%Y") if review.reviewed_at else "sem data" }}
+  </div>
+  <strong>{{ review.review_title }}</strong>
+  <div class="texto">{{ review.review_text }}</div>
+</div>
+{% endfor %}
+{% else %}
+<p class="legenda">Nenhuma avaliação com esses filtros.</p>
+{% endif %}

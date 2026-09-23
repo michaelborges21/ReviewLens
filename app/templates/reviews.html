@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% set ativo = 'reviews' %}
+{% block titulo %}Avaliações — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Avaliações</h2>
+<p class="legenda">Texto exibido como dado: nada que venha da avaliação é interpretado como marcação.</p>
+
+<form class="filtros" method="get" action="/reviews"
+      hx-get="/reviews" hx-target="#tabela" hx-swap="innerHTML">
+  <div>
+    <label for="nota">Nota</label>
+    <select name="nota" id="nota">
+      <option value="">todas</option>
+      {% for n in [1, 2, 3, 4, 5] %}
+      <option value="{{ n }}" {{ 'selected' if filtros.nota == n }}>{{ n }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="ano_de">De (ano)</label>
+    <input type="number" name="ano_de" id="ano_de" value="{{ filtros.ano_de or '' }}" min="1996" max="2013">
+  </div>
+  <div>
+    <label for="ano_ate">Até (ano)</label>
+    <input type="number" name="ano_ate" id="ano_ate" value="{{ filtros.ano_ate or '' }}" min="1996" max="2013">
+  </div>
+  <div>
+    <label for="genero_nome">Gênero</label>
+    <input type="text" name="genero_nome" id="genero_nome" value="{{ filtros.genero_nome or '' }}" placeholder="ex.: Fiction">
+  </div>
+  <button type="submit">Filtrar</button>
+</form>
+
+<div id="tabela">
+  {% include "_tabela_reviews.html" %}
+</div>
+{% endblock %}
