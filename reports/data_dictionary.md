@@ -51,6 +51,25 @@ qual edição recebeu a avaliação.
 | `review_id` | UINTEGER (review canônica) |
 | `book_id` | VARCHAR |
 
+## `users_agg`
+Uma linha por usuário identificado (`user_hash` nulo fica de fora — não é um usuário).
+Colunas: `user_hash`, `n_reviews`, `nota_media`, `comprimento_mediano`, `primeira_review`,
+`ultima_review`. Base do ranking de candidatos a entrevista (spec 04).
+
+## `author_stats`
+Uma linha por autor, via `book_authors`. Colunas: `author`, `n_livros`, `n_reviews`,
+`nota_media`, `nota_bayesiana`.
+
+A **nota bayesiana** é `(v/(v+m))·R + (m/(v+m))·C`, com `v` = reviews do autor, `R` = sua média,
+`C` = média global e `m` = 50. Serve para impedir que um autor com duas avaliações 5 estrelas
+lidere o ranking. **Ordenar por `nota_media` reproduz exatamente esse viés** — use
+`nota_bayesiana` em qualquer ranking que vá para slide.
+
+## `genre_stats`
+Uma linha por categoria. Colunas: `categoria`, `n_livros`, `n_reviews`, `nota_media`,
+`comprimento_mediano`. Um livro com duas categorias conta nas duas, então a soma de `n_livros`
+passa do total de livros — é esperado, não é erro.
+
 ## Cuidados ao consultar
 - **Contar reviews por livro**: usar `review_editions` se a pergunta é sobre a edição; usar
   `reviews` se é sobre conteúdo distinto. Contar `reviews` por `book_id` subestima edições.

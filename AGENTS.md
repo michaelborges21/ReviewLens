@@ -55,6 +55,7 @@ O conjunto antigo em `specs/_archive/` **não é normativo** — só as specs li
 make setup      # uv sync + pre-commit install
 make check      # ruff + mypy + pytest (unitários, sem chamadas reais a LLM)
 make data       # ingestão raw -> interim -> processed (DuckDB/parquet)
+make eda        # figuras e números do checklist da spec 01 em reports/
 make enrich     # pipeline NLP offline (exige estimativa de custo aprovada)
 make index      # constrói índices de retrieval
 make eval       # roda specs/06 (subconjunto rápido: make eval-smoke)

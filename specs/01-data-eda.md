@@ -52,7 +52,8 @@ Base grande → etapas com LLM usam **amostra estratificada** (gênero × faixa 
 - Volume por ano, gênero, autor; cauda longa de livros e usuários (H6).
 - Distribuição de notas global e por gênero; bimodalidade (H4).
 - Comprimento de texto vs nota (H2).
-- Qualidade: nulos, idioma, textos vazios/curtos, spam.
+- Qualidade: nulos, textos vazios/curtos, spam. (Idioma fica para a F1, sobre a amostra
+  estratificada — detectar em 2,24M de textos custaria dependência e tempo sem servir a esta fase.)
 - Top autores por volume e por nota bayesiana (evitar ranking enviesado por poucos votos).
 - Evolução temporal da nota por autor/gênero (H7).
 

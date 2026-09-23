@@ -128,3 +128,13 @@ Recomendação: (b) — preserva a legibilidade do corpo do prompt e viabiliza o
   lista de autores vazia explode para nulo e é descartada, mas o Polars 2.0 inverte esse default
   e os 31.413 livros sem autor passariam a gerar par em `book_authors`. Cheguei a fixar isso no
   `read_csv` da ingestão por engano — o parâmetro não existe lá, e o `mypy --strict` pegou.
+- 2026-09-22 — EDA e fechamento da F0 (spec 01). Duas decisões: (a) **veredito parcial** — H1, H3
+  e H5 dependem de aspectos e sentimento, que só existem na F1, então a EDA as marca como
+  pendentes em vez de fingir conclusão; a spec 00 foi alterada para admitir isso. (b) **idioma
+  sai do checklist de qualidade** — detectar em 2,24M de textos custaria dependência e tempo, e
+  quem precisa é a F1 sobre a amostra estratificada. Achado que contraria a leitura intuitiva de
+  H2 e afeta a spec 04: o comprimento da review **não cresce com a nota**, faz um arco — mediana
+  de 645 caracteres na nota 3 contra 459 na nota 5. Quem dá 5 estrelas escreve pouco; quem
+  argumenta é o público do meio. Logo, "melhor candidato a entrevista" não é o resenhista
+  entusiasmado. Agregações vivem em SQL dentro do DuckDB (`src/bri/data/stats.py`) e são testadas
+  contra banco em memória, em vez de reimplementadas em Python só para ficarem testáveis.

@@ -22,7 +22,10 @@ Analistas de uma editora exploram avaliações de livros manualmente. É lento, 
 - **H6** Uma minoria de usuários prolíficos concentra boa parte das avaliações (viés a controlar).
 - **H7** Existe tendência temporal (novas edições/adaptações mudam percepção).
 
-Cada hipótese termina a EDA como: ✅ confirmada / ❌ refutada / ⚠️ inconclusiva — com gráfico em `reports/`.
+Cada hipótese termina como: ✅ confirmada / ❌ refutada / ⚠️ inconclusiva — com gráfico em
+`reports/`. **H1, H3 e H5 dependem do enriquecimento** (aspectos e sentimento não existem antes
+da F1): na EDA elas ficam como ⏳ pendente e só recebem veredito ao fim da F1. Prometer os sete
+vereditos na EDA seria prometer o que o dado dessa fase não sustenta.
 
 ## Roadmap
 | Fase | Entrega | Critério de saída |

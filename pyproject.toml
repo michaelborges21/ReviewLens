@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "duckdb>=1.1",
+    "matplotlib>=3.9",
     "polars>=1.17",
     "pyarrow>=18",
 ]
