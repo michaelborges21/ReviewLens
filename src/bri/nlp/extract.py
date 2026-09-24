@@ -74,9 +74,14 @@ def extrair(review: dict[str, str | float]) -> ReviewEnrichment | None:
         return None
 
     validos = [a for a in ultimo.aspects if _evidencia_valida(a, texto)]
-    descartados = [a.aspect for a in ultimo.aspects if not _evidencia_valida(a, texto)]
-    if descartados:
-        registrar_descarte(review_id, "evidencia_nao_literal", descartados)
+    inventados = [a for a in ultimo.aspects if not _evidencia_valida(a, texto)]
+    if inventados:
+        # a evidência rejeitada vai no log: sem ela não se diagnostica a falha sem reprocessar
+        registrar_descarte(
+            review_id,
+            "evidencia_nao_literal",
+            [{"aspect": a.aspect, "evidence": a.evidence} for a in inventados],
+        )
     return ultimo.model_copy(update={"aspects": validos})
 
 

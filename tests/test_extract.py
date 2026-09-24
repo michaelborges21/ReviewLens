@@ -102,6 +102,7 @@ def test_evidencia_nao_literal_descarta_so_o_aspecto(
     registros = [json.loads(linha) for linha in log.read_text().splitlines()]
     assert registros[0]["review_id"] == "42"
     assert registros[0]["motivo"] == "evidencia_nao_literal"
+    assert registros[0]["detalhe"] == [{"aspect": "enredo", "evidence": "isto não está no texto"}]
 
 
 def test_schema_invalido_apos_retry_descarta_review_inteira(

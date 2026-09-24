@@ -57,6 +57,17 @@ Consequências:
   `format` do Ollama e `think: false`. Sem elas o mesmo gemma4 caiu para 33% de enum correto e
   50,4s por review — 7,8× mais lento. Quem mexer no provider precisa preservar as três.
 
+**Atualização 2026-09-24 — a tabela acima mediu 6 reviews; agora há 2.100.** A evidência literal
+ficou em **97,2% no nível de aspecto** (4.695 mantidos, 134 descartados) e 94,0% no nível de
+review (126 das 2.100 trouxeram ao menos um aspecto inventado). Os "100%" não sobreviveram à
+escala, mas a decisão sobrevive: 97,2% continua muito acima dos 83% e 67% dos concorrentes no
+mesmo piloto. Verificado que **não é artefato de normalização** — newline, aspas curvas,
+`&nbsp;`, entidade HTML, espaço duplo e travessão não aparecem em nenhum dos dois grupos. O único
+sinal é o tamanho da review: 882 caracteres médios nas descartadas contra 623 nas limpas, ou seja,
+o mesmo padrão "mais aspecto, mais erro de evidência" que motivou a escolha, agora em função do
+comprimento do texto. Tempo real: **3,06s por review** (29% abaixo dos 4,3s estimados), o que põe
+a amostra inteira em ~17,0h em vez de 23,6h.
+
 ### ADR-005 — Vector store
 Status: proposta — LanceDB vs Qdrant.
 
@@ -253,3 +264,23 @@ abstração deve acomodar outros provedores comerciais igualmente. Nada hoje dep
   Consequência em cadeia: pipeline local + runner sem GPU = o gate de LLM sai do CI e vira local
   (ADR-008), o que de quebra remove do `ci.yml` um job que hoje quebraria, por chamar
   `evals/run_evals.py`, que nunca existiu.
+- 2026-09-24 — Primeira rodada longa de `make enrich`: 2.100 de 19.949 reviews em 2h, com o
+  checkpoint fazendo o que prometia (zero duplicata, zero reprocessamento) e nenhuma falha de
+  schema após retry. A revisão dos números rendeu cinco achados; três foram corrigidos aqui.
+  (a) A ADR-004 ganhou a medição em escala, que derruba o "100% de evidência literal" para 97,2%
+  no nível de aspecto — o tipo de número que só aparece quando o piloto sai de 6 para 2.100 casos.
+  (b) O log de descarte passou a gravar **a evidência inventada**, não só o nome do aspecto: sem
+  ela eu não conseguia diagnosticar as 126 falhas sem reprocessar tudo, e essas falhas são
+  justamente matéria-prima do golden set da spec 06. (c) `reports/sampling.md` ainda afirmava que
+  `make enrich` estava bloqueado até a ADR-004 e tratava custo em reais como se a execução fosse
+  paga; como o arquivo é gerado, a correção foi no gerador (`sampling.py`), que agora apresenta a
+  tabela de custo como **contrafactual** — o que um provider comercial cobraria — e declara o
+  limite real como tempo, não dinheiro. O `.md` só reflete isso no próximo `make sample`.
+  Dois achados ficaram **pendentes de decisão**, ambos no prompt `extract_review.md`: a linha que
+  manda preencher `score_text_mismatch`, campo que não existe em `ReviewEnrichment` e que o JSON
+  Schema no `format` torna impossível de emitir (instrução morta gastando token em toda chamada);
+  e a ausência do enum de sentimento, que o prompt nunca lista, embora a ADR-004 trate "enum no
+  prompt" como alavanca obrigatória e o modelo já tenha emitido 22 `neutro` e 7 `misto` sem
+  instrução alguma. Não mexi em nenhum dos dois porque a spec 09 exige `make eval-smoke` sem
+  regressão para alterar prompt, e `eval-smoke` é hoje um stub com `exit 1` — mudar prompt sem
+  verificador é exatamente o que a spec 09 proíbe.
