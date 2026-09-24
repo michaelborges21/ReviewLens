@@ -1,4 +1,4 @@
-.PHONY: setup check data eda sample enrich index eval eval-smoke app
+.PHONY: setup check data eda sample enrich enrich-carregar index eval eval-smoke app
 
 setup:
 	uv sync
@@ -22,7 +22,10 @@ sample:
 	uv run python -m bri.nlp.sampling
 
 enrich:
-	@echo "ainda não implementado — ver specs/02-nlp-pipeline.md"; exit 1
+	uv run python -m bri.nlp.extract $(if $(LIMITE),--limite $(LIMITE))
+
+enrich-carregar:
+	uv run python -m bri.nlp.extract --carregar
 
 index:
 	@echo "ainda não implementado — ver specs/03-rag-knowledge-base.md"; exit 1
