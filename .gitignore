@@ -7,7 +7,8 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .venv
-.claude/settings.local.json
+# Configurações do Claude Code ficam só locais — não expor no repositório.
+.claude/
 
 # Documento pessoal de acompanhamento — fica só na máquina, nunca no repositório.
 ETAPAS_PROCESSO.md
