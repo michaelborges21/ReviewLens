@@ -6,7 +6,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   quality:
@@ -23,27 +22,7 @@ jobs:
       - run: uv run mypy src/
       - run: uv run pytest -q          # sem chamadas reais a LLM (fakes)
 
-  # O job llm-gates foi removido pela ADR-008: exigia GPU que o runner não tem (o modelo do
-  # projeto é gemma4:12b local) e uma chave de API que o projeto não usa. eval-smoke e red-team
-  # rodam localmente, antes do merge.
-
-  ai-review:
-    name: Review por IA (não bloqueia)
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    if: github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - uses: actions/checkout@v4
-      - uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            Revise este PR contra specs/ e AGENTS.md. Comente apenas:
-            1) divergência da spec citada no PR;
-            2) prompt alterado sem bump de versão ou sem eval;
-            3) tool nova sem escopo de permissão (specs 04/05);
-            4) texto de review tratado como instrução (injeção indireta);
-            5) PII em log, resposta ou export;
-            6) número destinado a slide sem script reprodutível em reports/.
-            Ignore estilo e formatação (trabalho do ruff). Máximo 5 comentários,
-            cada um com arquivo, linha e correção sugerida. Não aprove nem reprove.
+  # Dois jobs foram removidos e o CI ficou só com `quality`:
+  #   llm-gates (ADR-008) — exigia GPU que o runner não tem; o modelo do projeto é local.
+  #   ai-review (ADR-011) — dependia de ANTHROPIC_API_KEY, e o projeto não usa chave de API.
+  # Com isso o CI não precisa de nenhum segredo de repositório.

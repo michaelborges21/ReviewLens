@@ -138,6 +138,23 @@ Consequências:
 − `app/` não é coberto pelo `mypy --strict`, que o `AGENTS.md` §4 restringe a `src/`; por isso a
   lógica mora em `src/bri/` e `app/` fica fino
 
+### ADR-011 — Nenhuma chave de API no projeto
+Data: 2026-09-23 · Status: aceita
+Contexto: a ADR-004 levou o enriquecimento para `gemma4:12b` local. Sobrou um único ponto ainda
+dependente de `ANTHROPIC_API_KEY`: o job `ai-review` do CI, que comentava nas PRs. Sem chave, ele
+falharia em toda PR — um job permanentemente vermelho é pior que job nenhum, porque ensina a
+equipe a ignorar CI vermelho.
+Decisão: remover o `ai-review`. O projeto **não usa chave de API de nenhum provider**. O CI fica
+só com `quality` (ruff, mypy, pytest) e não precisa de segredo algum de repositório.
+Consequências:
++ nenhuma credencial em segredo de repositório, nenhum custo recorrente
++ CI mais simples e sempre executável, inclusive em fork
+− perde-se a revisão automática de aderência a spec, injeção indireta e PII; o checklist da
+  seção 4 da spec 09 vira responsabilidade humana
+**Trabalho futuro deixado em aberto**: a camada `src/bri/llm/` segue com providers
+intercambiáveis por desenho. Se um dia houver chave, ela não precisa ser da Anthropic — a
+abstração deve acomodar outros provedores comerciais igualmente. Nada hoje depende disso.
+
 ## Log de sessão
 <!-- AAAA-MM-DD — o que foi feito, decisão tomada, próximo passo -->
 - 2026-09-21 — Reorganização do repositório: specs consolidadas em português em `specs/`,

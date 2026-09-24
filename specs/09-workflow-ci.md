@@ -31,7 +31,9 @@ LLM é não determinístico; **não pode ser gate de bloqueio**. Aprovar hoje e 
 |---|---|---|---|
 | Gate obrigatório (automático) | ruff · mypy · pytest | CI | **Sim** |
 | Gate obrigatório (manual) | `eval-smoke` · **red-team de injeção** | **local, antes do merge** | Sim, por disciplina |
-| Review qualitativo | Claude Action comentando no PR | CI | Não — comenta |
+
+O review qualitativo por IA saiu (ADR-011): dependia de chave de API, que o projeto não usa.
+O papel que ele cumpria — pegar o que o linter não vê — passou a ser revisão humana.
 
 O red-team continua sendo o diferencial: o merge não deve acontecer se o agente voltar a ser
 vulnerável a instrução escondida dentro de uma review.
@@ -46,16 +48,18 @@ disciplina humana, que esta mesma spec aponta como frágil. Mitigação em abert
 | Job | Quando | Conteúdo |
 |---|---|---|
 | `quality` | todo PR | ruff, mypy, pytest (sem chamada real a LLM) |
-| `ai-review` | PR aberto/atualizado | Claude Action; comenta, não bloqueia |
 
-O job `llm-gates` **foi removido do `ci.yml`** (ADR-008): exigia GPU que o runner não tem e uma
-chave de API que o projeto não usa mais. `eval-smoke` e red-team rodam localmente.
+Dois jobs foram removidos do `ci.yml`: `llm-gates` (ADR-008), que exigia GPU inexistente no
+runner, e `ai-review` (ADR-011), que dependia de chave de API. `eval-smoke` e red-team rodam
+localmente, antes do merge.
 
-**Custo**: disparar em `pull_request`, nunca em `push`. Com o pipeline local, o CI não precisa de
-nenhum segredo para os gates obrigatórios.
+**Custo**: disparar em `pull_request`, nunca em `push`. O CI **não precisa de nenhum segredo** —
+não há chave de API no projeto.
 
-## 4. Escopo do review por IA
-Pedir ao revisor o que linter não pega:
+## 4. Escopo da revisão de PR (hoje humana)
+A lista abaixo nasceu como instrução para o revisor por IA, removido pela ADR-011. Continua
+valendo como **checklist de revisão humana** — e volta a ser automatizável se um dia o projeto
+tiver um provider configurado. Olhar o que o linter não pega:
 - aderência à spec citada no PR;
 - prompt alterado sem incremento de versão ou sem eval;
 - tool nova sem limite de permissão (spec 04/05);

@@ -8,3 +8,6 @@ __pycache__/
 .ipynb_checkpoints/
 .venv
 .claude/settings.local.json
+
+# Documento pessoal de acompanhamento — fica só na máquina, nunca no repositório.
+ETAPAS_PROCESSO.md
