@@ -24,7 +24,30 @@ Decisão: DuckDB read-only consultado via tool de SQL validada.
 Alternativas: pandas em memória (sem SQL auditável), Postgres (overhead desnecessário).
 
 ### ADR-003 — Framework do agente
-Status: proposta — loop explícito vs LangGraph. Decidir no início da F2.
+Data: 2026-09-27 · Status: **aceita** — loop explícito em Python.
+Aceita com validação em aberto: o Michael aceitou para ver o comportamento na prática, coerente
+com as specs serem documento vivo. O gatilho de revisão está nas Consequências — se o estado
+conversacional crescer além de um pydantic em memória, reabrir em favor do LangGraph.
+Contexto: a F2 precisa de um loop que receba a pergunta, classifique a intenção, chame ferramentas
+e componha a resposta. O roteador determinístico já existe e funciona
+(`src/bri/agent/roteador.py`, coberto por teste); falta a orquestração das tools e o loop ReAct
+que a spec 04 limita a 5 passos. Duas formas: loop explícito em Python ou LangGraph.
+Decisão proposta: **loop explícito em Python**. Razões:
+- a spec 04 já declara a preferência ("preferir loop explícito simples; LangGraph se o estado
+  crescer") e o AGENTS.md §8 proíbe abstração para caso único;
+- não há estado distribuído a gerenciar — o `ConversationState` da spec 04 é um pydantic em
+  memória, em processo único;
+- loop ReAct de no máximo 5 passos sobre 4 a 5 tools é da ordem de 100 linhas, menos código que a
+  configuração do framework que o substituiria;
+- o ecossistema do LangGraph pressupõe provider comercial, o que atrita com a ADR-011.
+Alternativas descartadas: LangGraph. Perde-se checkpoint de conversa, streaming e visualização do
+grafo — nenhum deles requisito da F2, e os dois primeiros implementáveis à mão se virarem
+necessidade.
+Consequências:
++ nenhuma dependência nova; o agente é código legível do próprio projeto
++ decisão barata de reverter: se o estado crescer, migra-se um loop de ~100 linhas
+− retry, timeout e limite de passos passam a ser responsabilidade nossa, não do framework, e
+  portanto precisam de teste explícito
 
 ### ADR-004 — Provider de LLM
 Status: **aceita** — `gemma4:12b` local, via Ollama.
@@ -69,7 +92,35 @@ comprimento do texto. Tempo real: **3,06s por review** (29% abaixo dos 4,3s esti
 a amostra inteira em ~17,0h em vez de 23,6h.
 
 ### ADR-005 — Vector store
-Status: proposta — LanceDB vs Qdrant.
+Data: 2026-09-27 · Status: **aceita** — nenhum store dedicado; o DuckDB faz o papel.
+Aceita com validação em aberto, pelo mesmo critério da ADR-003. Gatilhos de revisão já
+registrados nas Consequências: a extensão vetorial do DuckDB atrapalhando na prática, ou
+crescimento para centenas de milhares de vetores. Em qualquer dos casos o LanceDB é o fallback
+já escolhido, e não uma decisão a tomar do zero.
+Contexto: o enquadramento original ("LanceDB vs Qdrant") pressupõe que a spec 03 precisa de um
+store dedicado. Com a amostra enriquecida, a premissa não se sustenta: são **19.947 avaliações
+(n medido em 2026-09-27)**, da ordem de 25 a 30 mil trechos após o chunking. Nessa escala,
+similaridade por varredura direta responde em milissegundos, e ambos os candidatos são
+infraestrutura desenhada para milhões de vetores — resolveriam um problema de escala que o
+projeto não tem.
+Decisão proposta: **nenhum store dedicado — usar o DuckDB, que já é a camada analítica
+(ADR-002)**. Vetores como array em coluna, similaridade em SQL, BM25 pela extensão FTS (opção que
+o AGENTS.md §4 já prevê) e fusão RRF numa única query. Embeddings gerados localmente pelo
+`embeddinggemma`, já presente no Ollama desta máquina — sem custo e sem chave (ADR-011).
+Alternativas descartadas:
+- **Qdrant**: é servidor. Acrescenta container, porta e processo a um projeto cuja ADR-002
+  escolheu banco embutido de propósito e cuja spec 00 põe deploy em produção fora de escopo.
+- **LanceDB**: fica como **fallback declarado**. É embutido, portanto coerente com o projeto; só
+  não se justifica hoje.
+Consequências:
++ zero infraestrutura nova, zero porta, zero dependência; backup é copiar um arquivo
++ busca híbrida (BM25 + densa + RRF) fica expressável em SQL, no mesmo lugar dos números
++ um sistema a menos para a apresentação ter de explicar
+− a extensão vetorial do DuckDB é jovem e seu índice HNSW tem limitações de persistência.
+  Mitigação: nesta escala não usamos índice — varredura direta basta, o que tira o risco do
+  caminho crítico
+− se a cobertura da base inteira acontecer (cenário da spec 07), a decisão precisa ser
+  revisitada em favor do LanceDB
 
 ### ADR-006 — Arquitetura híbrida: SQL para números, RAG para opiniões
 Status: proposta
@@ -284,3 +335,28 @@ abstração deve acomodar outros provedores comerciais igualmente. Nada hoje dep
   instrução alguma. Não mexi em nenhum dos dois porque a spec 09 exige `make eval-smoke` sem
   regressão para alterar prompt, e `eval-smoke` é hoje um stub com `exit 1` — mudar prompt sem
   verificador é exatamente o que a spec 09 proíbe.
+- 2026-09-27 — **F1 concluída**: a extração de aspectos cobriu a amostra inteira — 19.947 de
+  19.949 avaliações, 45.847 aspectos, 17h43min de GPU em 5 sessões ao longo de 4 dias. As 2
+  ausentes deram resposta malformada duas vezes e foram descartadas, conforme a regra de não
+  gravar dado que falhou validação. Precisão de citação literal ficou em 97,0%, estável nas cinco
+  rodadas (97,2 · 97,0 · 97,1 · 97,1 · 97,0) — o que encerra a dúvida sobre os "100%" da ADR-004
+  ter sido ruído: 97% é propriedade do arranjo. Auditoria pós-execução reverificou as 45.847
+  citações contra o texto original sem confiar no pipeline: zero evidência não literal, zero
+  categoria ou sentimento fora do enum, zero duplicata, zero linha corrompida pelas interrupções.
+  **Decisão tomada durante a execução: congelar o prompt.** Os dois defeitos conhecidos
+  (`score_text_mismatch` órfão e ausência do enum de sentimento) ficaram sem correção de
+  propósito. Corrigir no meio faria 14.100 avaliações rodarem sob uma regra e 5.849 sob outra,
+  contaminando todo agregado sem forma de separar depois; as alternativas eram refazer 12h de
+  máquina ou aceitar estatística suja. A correção passa a valer para trabalho futuro (spec 07).
+  **ADR-003 e ADR-005 aceitas**, ambas com validação em aberto. A 003 vai de loop explícito, como
+  a spec 04 já preferia. A 005 mudou de pergunta: a medição da amostra mostrou que "LanceDB vs
+  Qdrant" partia de premissa falsa — 25 a 30 mil trechos não justificam store dedicado, então o
+  DuckDB acumula o papel e o LanceDB fica como fallback declarado. Ganho colateral: a F2 deixa de
+  depender de infraestrutura nova.
+  Ponto de atenção para quem usar o dado: `is_recommendation` é campo obrigatório e o modelo nunca
+  devolveu nulo em 19.947 chances — das 802 avaliações sem nenhum aspecto, 675 (84%) saíram
+  marcadas como recomendação. O campo tem viés otimista com texto vago e não serve como indicador
+  isolado; os aspectos não têm esse problema.
+  Próximo passo: `make enrich-carregar` para criar `review_enriched`, e então a F2 por cima de
+  SQL — narração com citação sai do campo `evidence`, que já é banco de citações verificadas, sem
+  depender do RAG.

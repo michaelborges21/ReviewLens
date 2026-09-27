@@ -19,19 +19,23 @@ O conjunto anterior, em português e com numeração diferente, está em
 [`_archive/pt/`](_archive/pt/). **Não é normativo** — serve só como histórico.
 
 ## ADRs
-Todo o registro de decisões vive em [`DECISIONS.md`](DECISIONS.md).
+Todo o registro de decisões vive em [`DECISIONS.md`](DECISIONS.md) — **inclusive o status de cada
+uma**. A tabela abaixo é só índice de assuntos: o status também vivia aqui, divergia do original a
+cada decisão tomada, e foi removido por isso. Fonte única, não cópia.
 
-| ADR | Assunto | Status |
-|---|---|---|
-| 001 | AGENTS.md como fonte única de instruções | aceita |
-| 002 | DuckDB como camada analítica | aceita |
-| 003 | Framework do agente (loop explícito vs LangGraph) | proposta |
-| 004 | Provider de LLM (local vs API comercial) | proposta |
-| 005 | Vector store (LanceDB vs Qdrant) | proposta |
-| 006 | Arquitetura híbrida: SQL para números, RAG para opiniões | proposta |
-| 007 | Enriquecimento offline em vez de LLM em tempo de consulta | proposta |
-| 008 | Modelo usado pelos gates de LLM no CI | proposta |
-| 009 | Formato dos arquivos de prompt (`.yaml` vs `.md`) | proposta |
+| ADR | Assunto |
+|---|---|
+| 001 | AGENTS.md como fonte única de instruções |
+| 002 | DuckDB como camada analítica |
+| 003 | Framework do agente (loop explícito vs LangGraph) |
+| 004 | Provider de LLM (local vs API comercial) |
+| 005 | Vector store (store dedicado vs DuckDB acumulando o papel) |
+| 006 | Arquitetura híbrida: SQL para números, RAG para opiniões |
+| 007 | Enriquecimento offline em vez de LLM em tempo de consulta |
+| 008 | Modelo usado pelos gates de LLM no CI |
+| 009 | Formato dos arquivos de prompt (`.yaml` vs `.md`) |
+| 010 | FastAPI + Jinja2 + HTMX no lugar de Streamlit |
+| 011 | Nenhuma chave de API no projeto |
 
 ## Mapa: técnicas de prompt/LLM → onde aparecem
 | Técnica | Onde | Intensidade |
