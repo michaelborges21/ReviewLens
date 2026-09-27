@@ -1,5 +1,5 @@
 # 01 — Dados e Análise Exploratória
-Status: rascunho v0.1
+Status: concluída (v0.1) — ingestão, limpeza, schema e EDA entregues; 2.239.998 reviews em DuckDB
 
 ## Fontes
 Dataset "Amazon Books Reviews" do Kaggle, duas tabelas — **schema confirmado em `data/raw/`**:

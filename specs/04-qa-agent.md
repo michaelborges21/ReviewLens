@@ -1,5 +1,6 @@
 # 04 — Agente de Q&A, ferramentas e estado
-Status: rascunho v0.1 · Framework: ADR-003 (pendente — preferir loop explícito simples; LangGraph se o estado crescer)
+Status: em implementação (v0.1) — roteador determinístico pronto e testado; tools, estado tipado e
+loop ReAct pendentes · Framework: **loop explícito** (ADR-003, aceita)
 
 ## Arquitetura
 ```

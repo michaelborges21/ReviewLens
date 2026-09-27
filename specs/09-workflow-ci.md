@@ -1,5 +1,6 @@
 # 09 — Workflow de desenvolvimento, loops e CI
-Status: rascunho v0.1
+Status: em implementação (v0.1) — regras em vigor e CI com `quality` rodando; o gate de eval
+ainda não é operacional, porque `eval-smoke` é stub (ver spec 06)
 
 ## 1. Doutrina de loops (regra central)
 > Um loop de correção automática só existe quando há um **verificador determinístico**.

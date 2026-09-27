@@ -1,5 +1,6 @@
 # 02 — Pipeline NLP (batch, offline)
-Status: rascunho v0.1
+Status: em implementação (v0.1) — etapa 3 (aspectos) concluída em 19.947 reviews; etapas 2
+(sentimento), 4 (tópicos) e 5 (sumarização) pendentes
 
 ## Princípio
 Tudo que pode ser **pré-computado** é pré-computado. O agente consulta resultados, não reprocessa 1M+ reviews em tempo de pergunta. Isso corta custo e latência e torna as respostas auditáveis.

@@ -1,19 +1,21 @@
 # Specs — índice e status
 
-Status: `rascunho` → `aprovada` → `em implementação` → `concluída`
+O status de cada spec fica **na linha 2 do próprio arquivo**, na escada
+`rascunho` → `aprovada` → `em implementação` → `concluída`. Não se repete aqui pelo mesmo motivo
+das ADRs: cópia divergia do original a cada avanço. Fonte única, não cópia.
 
-| # | Spec | Status | Cobre itens do case |
-|---|---|---|---|
-| 00 | [Visão geral, hipóteses e roadmap](00-overview.md) | rascunho v0.1 | a, b, d, i |
-| 01 | [Dados e EDA](01-data-eda.md) | rascunho v0.1 | e |
-| 02 | [Pipeline NLP (batch, offline)](02-nlp-pipeline.md) | rascunho v0.1 | e, f |
-| 03 | [Bases de conhecimento e RAG](03-rag-knowledge-base.md) | rascunho v0.1 | g |
-| 04 | [Agente de Q&A, ferramentas e estado](04-qa-agent.md) | rascunho v0.1 | h |
-| 05 | [Prompts, saídas estruturadas e guardrails](05-prompts-guardrails.md) | rascunho v0.1 | h |
-| 06 | [Avaliação](06-evals.md) | rascunho v0.1 | c, h, i |
-| 07 | [Fine-tuning (destilação)](07-fine-tuning.md) | backlog | j |
-| 08 | [Apresentação e estimativa de impacto](08-presentation-impact.md) | rascunho v0.1 | a–j |
-| 09 | [Workflow, loops e CI](09-workflow-ci.md) | rascunho v0.1 | — |
+| # | Spec | Cobre itens do case |
+|---|---|---|
+| 00 | [Visão geral, hipóteses e roadmap](00-overview.md) | a, b, d, i |
+| 01 | [Dados e EDA](01-data-eda.md) | e |
+| 02 | [Pipeline NLP (batch, offline)](02-nlp-pipeline.md) | e, f |
+| 03 | [Bases de conhecimento e RAG](03-rag-knowledge-base.md) | g |
+| 04 | [Agente de Q&A, ferramentas e estado](04-qa-agent.md) | h |
+| 05 | [Prompts, saídas estruturadas e guardrails](05-prompts-guardrails.md) | h |
+| 06 | [Avaliação](06-evals.md) | c, h, i |
+| 07 | [Fine-tuning (destilação)](07-fine-tuning.md) | j |
+| 08 | [Apresentação e estimativa de impacto](08-presentation-impact.md) | a–j |
+| 09 | [Workflow, loops e CI](09-workflow-ci.md) | — |
 
 O conjunto anterior, em português e com numeração diferente, está em
 [`_archive/pt/`](_archive/pt/). **Não é normativo** — serve só como histórico.

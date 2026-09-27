@@ -1,5 +1,7 @@
 # 06 — Avaliação
-Status: rascunho v0.1 · **Sem eval, não há como saber se uma mudança melhorou algo.**
+Status: aprovada (v0.1) — conjuntos e metas definidos, nada construído: `make eval` e
+`make eval-smoke` são stubs, e o golden set de 200 reviews depende de rotulagem humana ·
+**Sem eval, não há como saber se uma mudança melhorou algo.**
 
 ## Conjuntos
 | Conjunto | Tamanho inicial | Gabarito |

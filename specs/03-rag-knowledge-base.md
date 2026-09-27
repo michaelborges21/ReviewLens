@@ -1,5 +1,6 @@
 # 03 — Bases de conhecimento e RAG
-Status: rascunho v0.1
+Status: aprovada (v0.1) — destravada pela ADR-005 (DuckDB acumula o papel de vector store);
+`src/bri/retrieval/` ainda vazio
 
 ## Quando usar RAG (e quando NÃO)
 - **RAG serve para**: "o que os leitores dizem sobre X", exemplos, citações, nuances.

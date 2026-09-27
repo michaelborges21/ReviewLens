@@ -1,5 +1,6 @@
 # 05 — Engenharia de prompts, saídas estruturadas e guardrails
-Status: rascunho v0.1
+Status: em implementação (v0.1) — prompts versionados em uso (`extract_review` v0.2.0);
+`src/bri/guardrails/` ainda vazio
 
 ## Versionamento de prompts
 `src/bri/prompts/<nome>.yaml`: `id`, `version`, `model`, `system`, `template`, `few_shot_bank` (opcional), `output_schema`, `changelog`.

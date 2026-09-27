@@ -1,5 +1,5 @@
 # 00 — Visão geral, hipóteses e roadmap
-Status: rascunho v0.1 · Dono: Michael · Revisar a cada fase concluída
+Status: aprovada (v0.1) · Dono: Michael · Revisar a cada fase concluída · F0 e F1 concluídas
 
 ## Problema
 Analistas de uma editora exploram avaliações de livros manualmente. É lento, não escala e depende de leitura humana.

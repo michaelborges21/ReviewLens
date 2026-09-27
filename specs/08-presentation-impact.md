@@ -1,5 +1,5 @@
 # 08 — Apresentação e estimativa de impacto
-Status: rascunho v0.1
+Status: rascunho (v0.1) — não iniciada; depende da F2 para o slide de demo
 
 ## Narrativa (Situação → Complicação → Resolução)
 Começar pela dor do analista, não pela tecnologia. Cada slide técnico responde "e daí para o negócio?".
