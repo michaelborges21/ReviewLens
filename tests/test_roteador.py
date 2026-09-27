@@ -37,6 +37,16 @@ def con() -> duckdb.DuckDBPyConnection:
         SELECT * FROM (VALUES ('h1', 1, 5.0, 10.0))
             t(user_hash, n_reviews, nota_media, comprimento_mediano)
     """)
+    con.execute("""
+        CREATE TABLE enrichment_sample AS SELECT * FROM (VALUES
+            (1, 'Dune', 5.0, TIMESTAMP '2010-05-01', 'ok', 'texto', 'h1')
+        ) t(review_id, title, rating, reviewed_at, review_title, review_text, user_hash)
+    """)
+    con.execute("""
+        CREATE TABLE review_enriched AS SELECT * FROM (VALUES
+            ('1', [{'aspect': 'enredo', 'sentiment': 'positivo', 'evidence': 'otima'}], true)
+        ) t(review_id, aspects, is_recommendation)
+    """)
     return con
 
 
@@ -67,10 +77,17 @@ def test_responde_autor_com_sql_visivel(con: duckdb.DuckDBPyConnection) -> None:
     assert "Frank Herbert" in resposta.texto
 
 
+def test_responde_autor_inclui_resumo_de_aspectos(con: duckdb.DuckDBPyConnection) -> None:
+    """A pergunta de autor já embute o aspecto mais citado, sem precisar de intenção nova."""
+    resposta = responder(con, "desempenho do autor Herbert")
+
+    assert "enredo" in resposta.texto
+
+
 def test_recusa_explica_o_que_sabe_fazer(con: duckdb.DuckDBPyConnection) -> None:
     """Recusar sem dizer o que dá para perguntar deixa o usuário sem saída."""
     resposta = responder(con, "qual sua opinião sobre esse livro")
 
     assert resposta.intencao is Intencao.FORA_DE_ESCOPO
     assert resposta.sql is None
-    assert "F1" in resposta.texto
+    assert "aspectos" in resposta.texto.lower()

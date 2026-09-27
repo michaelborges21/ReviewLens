@@ -108,6 +108,18 @@ def _candidatos(pergunta: str) -> list[str]:
     return sorted(uteis, key=len, reverse=True)
 
 
+def _resumo_de_aspectos(aspectos: dict[str, Any]) -> str:
+    """Cita o aspecto mais mencionado, ou vazio se a amostra não cobre a entidade."""
+    if not aspectos["aspectos"]:
+        return ""
+    top = aspectos["aspectos"][0]
+    return (
+        f" Nas {aspectos['avaliacoes_analisadas']} avaliações analisadas por IA, "
+        f"o aspecto mais citado é {top['aspecto']} ({top['n_mencoes']} menções, "
+        f"{top['pct_negativo']:.0f}% negativas)."
+    )
+
+
 def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
     """Responde o que dá para responder com SQL hoje; recusa o resto em vez de inventar."""
     intencao = classificar(pergunta)
@@ -126,29 +138,37 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
     if intencao is Intencao.AUTOR and entidade:
         dados = consultas.performance_do_autor(con, entidade)
         serie: list[dict[str, Any]] = dados["serie"]
+        aspectos = consultas.aspectos_do_autor(con, entidade)
         return Resposta(
             intencao,
-            f"Performance de {entidade}.",
+            f"Performance de {entidade}.{_resumo_de_aspectos(aspectos)}",
             "SELECT year(reviewed_at), count(*), avg(rating) FROM book_authors"
-            " JOIN reviews USING (title) WHERE author = ? GROUP BY 1",
+            " JOIN reviews USING (title) WHERE author = ? GROUP BY 1\n"
+            "-- aspectos: WITH base AS (SELECT re.aspects FROM review_enriched re"
+            " JOIN enrichment_sample es USING (review_id) JOIN book_authors USING (title)"
+            " WHERE author = ?) ...",
             serie,
         )
 
     if intencao is Intencao.GENERO and entidade:
         dados = consultas.performance_do_genero(con, entidade)
+        aspectos = consultas.aspectos_do_genero(con, entidade)
         return Resposta(
             intencao,
-            f"Distribuição de notas em {entidade}.",
+            f"Distribuição de notas em {entidade}.{_resumo_de_aspectos(aspectos)}",
             "SELECT rating, count(*) FROM reviews JOIN books USING (title)"
-            " WHERE list_contains(categories, ?) GROUP BY 1",
+            " WHERE list_contains(categories, ?) GROUP BY 1\n"
+            "-- aspectos: WITH base AS (SELECT re.aspects FROM review_enriched re"
+            " JOIN enrichment_sample es USING (review_id) JOIN books b USING (title)"
+            " WHERE list_contains(categories, ?)) ...",
             dados["distribuicao"],
         )
 
     return Resposta(
         Intencao.FORA_DE_ESCOPO,
         "Não consigo responder isso ainda. Hoje respondo sobre desempenho de um autor, "
-        "distribuição de notas de um gênero e números gerais da base. Perguntas sobre o que "
-        "os leitores dizem (aspectos, sentimento, resumos) dependem do enriquecimento da F1.",
+        "distribuição de notas de um gênero, o que os leitores citam sobre eles "
+        "(aspectos extraídos por IA de uma amostra) e números gerais da base.",
         None,
         [],
     )

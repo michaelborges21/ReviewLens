@@ -6,6 +6,8 @@ import duckdb
 import pytest
 
 from bri.data.consultas import (
+    aspectos_do_autor,
+    aspectos_do_genero,
     buscar_reviews,
     candidatos_a_entrevista,
     numeros_gerais,
@@ -51,6 +53,19 @@ def con() -> duckdb.DuckDBPyConnection:
         CREATE TABLE users_agg AS SELECT * FROM (VALUES
             ('h1', 5, 3.0, 800.0), ('h2', 2, 5.0, 100.0)
         ) t(user_hash, n_reviews, nota_media, comprimento_mediano)
+    """)
+    con.execute("""
+        CREATE TABLE enrichment_sample AS SELECT * FROM (VALUES
+            (1, 'Dune', 5.0, TIMESTAMP '2010-05-01', 'otimo', 'texto longo de review aqui', 'h1')
+        ) t(review_id, title, rating, reviewed_at, review_title, review_text, user_hash)
+    """)
+    con.execute("""
+        CREATE TABLE review_enriched AS SELECT * FROM (VALUES
+            ('1', [
+                {'aspect': 'enredo', 'sentiment': 'negativo', 'evidence': 'ficou arrastado'},
+                {'aspect': 'enredo', 'sentiment': 'positivo', 'evidence': 'reviravolta boa'}
+            ], true)
+        ) t(review_id, aspects, is_recommendation)
     """)
     return con
 
@@ -98,6 +113,53 @@ def test_candidatos_preferem_quem_escreve_mais(con: duckdb.DuckDBPyConnection) -
     candidatos: list[dict[str, Any]] = candidatos_a_entrevista(con)
 
     assert candidatos[0]["user_hash"] == "h1"
+
+
+def test_aspectos_do_autor_agrega_por_categoria(con: duckdb.DuckDBPyConnection) -> None:
+    """'Dune' tem 2 aspectos de enredo na amostra: 1 negativo, 1 positivo."""
+    aspectos = aspectos_do_autor(con, "Frank Herbert")
+
+    assert aspectos["aspectos"][0]["aspecto"] == "enredo"
+    assert aspectos["aspectos"][0]["n_mencoes"] == 2
+    assert aspectos["aspectos"][0]["pct_negativo"] == 50.0
+    assert aspectos["aspectos"][0]["exemplo_negativo"] == "ficou arrastado"
+    assert aspectos["avaliacoes_analisadas"] == 1
+    assert aspectos["avaliacoes_totais"] == 2
+
+
+def test_aspectos_do_autor_sem_dado_na_amostra(con: duckdb.DuckDBPyConnection) -> None:
+    """'Hobbit' tem review na base, mas nenhuma linha caiu na amostra enriquecida."""
+    aspectos = aspectos_do_autor(con, "Tolkien")
+
+    assert aspectos["aspectos"] == []
+    assert aspectos["avaliacoes_analisadas"] == 0
+    assert aspectos["avaliacoes_totais"] == 1
+
+
+def test_aspectos_do_autor_sem_review_enriched_nao_quebra() -> None:
+    """`make data` recria o banco sem review_enriched; a função degrada em vez de lançar exceção."""
+    sem_enriquecimento = duckdb.connect(":memory:")
+    sem_enriquecimento.execute(
+        "CREATE TABLE reviews AS SELECT * FROM (VALUES (1, 'Dune', 5.0))"
+        " t(review_id, title, rating)"
+    )
+    sem_enriquecimento.execute(
+        "CREATE TABLE book_authors AS SELECT * FROM (VALUES ('Dune', 'Frank Herbert'))"
+        " t(title, author)"
+    )
+
+    aspectos = aspectos_do_autor(sem_enriquecimento, "Frank Herbert")
+
+    assert aspectos == {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": 1}
+
+
+def test_aspectos_do_genero_agrega_por_categoria(con: duckdb.DuckDBPyConnection) -> None:
+    aspectos = aspectos_do_genero(con, "Ficção")
+
+    assert aspectos["aspectos"][0]["aspecto"] == "enredo"
+    assert aspectos["aspectos"][0]["n_mencoes"] == 2
+    assert aspectos["avaliacoes_analisadas"] == 1
+    assert aspectos["avaliacoes_totais"] == 2
 
 
 def test_numeros_gerais(con: duckdb.DuckDBPyConnection) -> None:

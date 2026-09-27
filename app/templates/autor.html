@@ -48,8 +48,33 @@
   </tbody>
 </table>
 
-<div class="pendente">
-  <strong>Pendente da F1.</strong> O que os leitores elogiam ou criticam neste autor exige
-  extração de aspectos (spec 02).
-</div>
+<h3>O que os leitores dizem</h3>
+{% if aspectos.aspectos %}
+<p class="legenda">
+  Com base em {{ "{:,}".format(aspectos.avaliacoes_analisadas).replace(",", ".") }} avaliações
+  analisadas por IA, de {{ "{:,}".format(aspectos.avaliacoes_totais).replace(",", ".") }} no total
+  para este autor. A extração é uma amostra, não a base inteira.
+</p>
+<table>
+  <thead>
+    <tr><th>Aspecto</th><th class="num">Menções</th><th class="num">% negativo</th><th>Exemplo</th></tr>
+  </thead>
+  <tbody>
+  {% for linha in aspectos.aspectos %}
+    <tr>
+      <td>{{ linha.aspecto }}</td>
+      <td class="num">{{ linha.n_mencoes }}</td>
+      <td class="num">{{ "%.0f"|format(linha.pct_negativo) }}%</td>
+      <td>{% if linha.exemplo_negativo %}"{{ linha.exemplo_negativo }}"{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="legenda">
+  Nenhuma avaliação deste autor está na amostra enriquecida por IA
+  ({{ "{:,}".format(aspectos.avaliacoes_totais).replace(",", ".") }} avaliações no total, nenhuma
+  amostrada).
+</p>
+{% endif %}
 {% endblock %}

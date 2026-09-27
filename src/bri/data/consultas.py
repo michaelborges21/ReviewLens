@@ -172,6 +172,99 @@ def candidatos_a_entrevista(
     )
 
 
+def _tabela_existe(con: duckdb.DuckDBPyConnection, nome: str) -> bool:
+    """review_enriched só existe após `make enrich-carregar`; `make data` recria o banco sem ela."""
+    return bool(
+        con.execute(
+            "SELECT 1 FROM information_schema.tables WHERE table_name = ?", [nome]
+        ).fetchone()
+    )
+
+
+def aspectos_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str, Any]:
+    """Agrega review_enriched por autor via enrichment_sample -> book_authors.
+
+    É amostra de 19.949 avaliações, não a base inteira. Sem `review_enriched` carregada, devolve
+    zero aspectos em vez de quebrar a página — mesmo comportamento de antes do enriquecimento.
+    """
+    totais = _linhas(
+        con,
+        "SELECT count(*) AS n FROM reviews r JOIN book_authors ba ON ba.title = r.title"
+        " WHERE ba.author = ?",
+        [autor],
+    )[0]["n"]
+    if not _tabela_existe(con, "review_enriched"):
+        return {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": totais}
+
+    aspectos = _linhas(
+        con,
+        """
+        WITH base AS (
+            SELECT re.aspects
+            FROM review_enriched re
+            JOIN enrichment_sample es ON es.review_id = re.review_id
+            JOIN book_authors ba ON ba.title = es.title
+            WHERE ba.author = ?
+        ),
+        expandido AS (SELECT unnest(aspects) AS a FROM base)
+        SELECT (a).aspect AS aspecto,
+               count(*) AS n_mencoes,
+               100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
+                   AS pct_negativo,
+               any_value((a).evidence) FILTER (WHERE (a).sentiment = 'negativo') AS exemplo_negativo
+        FROM expandido GROUP BY 1 ORDER BY n_mencoes DESC
+        """,
+        [autor],
+    )
+    analisadas = _linhas(
+        con,
+        "SELECT count(DISTINCT es.review_id) AS n FROM enrichment_sample es"
+        " JOIN book_authors ba ON ba.title = es.title WHERE ba.author = ?",
+        [autor],
+    )[0]["n"]
+    return {"aspectos": aspectos, "avaliacoes_analisadas": analisadas, "avaliacoes_totais": totais}
+
+
+def aspectos_do_genero(con: duckdb.DuckDBPyConnection, categoria: str) -> dict[str, Any]:
+    """Mesma agregação de aspectos_do_autor, via books.categories em vez de book_authors."""
+    totais = _linhas(
+        con,
+        "SELECT count(*) AS n FROM reviews r JOIN books b ON b.title = r.title"
+        " WHERE list_contains(b.categories, ?)",
+        [categoria],
+    )[0]["n"]
+    if not _tabela_existe(con, "review_enriched"):
+        return {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": totais}
+
+    aspectos = _linhas(
+        con,
+        """
+        WITH base AS (
+            SELECT re.aspects
+            FROM review_enriched re
+            JOIN enrichment_sample es ON es.review_id = re.review_id
+            JOIN books b ON b.title = es.title
+            WHERE list_contains(b.categories, ?)
+        ),
+        expandido AS (SELECT unnest(aspects) AS a FROM base)
+        SELECT (a).aspect AS aspecto,
+               count(*) AS n_mencoes,
+               100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
+                   AS pct_negativo,
+               any_value((a).evidence) FILTER (WHERE (a).sentiment = 'negativo') AS exemplo_negativo
+        FROM expandido GROUP BY 1 ORDER BY n_mencoes DESC
+        """,
+        [categoria],
+    )
+    analisadas = _linhas(
+        con,
+        "SELECT count(DISTINCT es.review_id) AS n FROM enrichment_sample es"
+        " JOIN books b ON b.title = es.title WHERE list_contains(b.categories, ?)",
+        [categoria],
+    )[0]["n"]
+    return {"aspectos": aspectos, "avaliacoes_analisadas": analisadas, "avaliacoes_totais": totais}
+
+
 def numeros_gerais(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     linhas = _linhas(
         con,

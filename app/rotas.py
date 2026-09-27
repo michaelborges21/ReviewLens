@@ -40,7 +40,14 @@ def autores(request: Request, con: Conexao, ordenar_por: str = Query("bayesiana"
 
 @router.get("/autores/{autor}", response_class=HTMLResponse)
 def autor(request: Request, con: Conexao, autor: str) -> HTMLResponse:
-    return _pagina(request, "autor.html", {"dados": consultas.performance_do_autor(con, autor)})
+    return _pagina(
+        request,
+        "autor.html",
+        {
+            "dados": consultas.performance_do_autor(con, autor),
+            "aspectos": consultas.aspectos_do_autor(con, autor),
+        },
+    )
 
 
 @router.get("/generos", response_class=HTMLResponse)
@@ -51,7 +58,12 @@ def generos(request: Request, con: Conexao) -> HTMLResponse:
 @router.get("/generos/{categoria}", response_class=HTMLResponse)
 def genero(request: Request, con: Conexao, categoria: str) -> HTMLResponse:
     return _pagina(
-        request, "genero.html", {"dados": consultas.performance_do_genero(con, categoria)}
+        request,
+        "genero.html",
+        {
+            "dados": consultas.performance_do_genero(con, categoria),
+            "aspectos": consultas.aspectos_do_genero(con, categoria),
+        },
     )
 
 

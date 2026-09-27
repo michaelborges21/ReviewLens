@@ -47,6 +47,22 @@ def cliente() -> Iterator[TestClient]:
         SELECT * FROM (VALUES ('h1abcdef012345', 5, 3.0, 800.0))
             t(user_hash, n_reviews, nota_media, comprimento_mediano)
     """)
+    con.execute(
+        """
+        CREATE TABLE enrichment_sample AS SELECT * FROM (VALUES
+            (1, 'Dune', 5.0, TIMESTAMP '2010-05-01', 'otimo', ?, 'h1')
+        ) t(review_id, title, rating, reviewed_at, review_title, review_text, user_hash)
+        """,
+        [SCRIPT],
+    )
+    con.execute(
+        """
+        CREATE TABLE review_enriched AS SELECT * FROM (VALUES
+            ('1', [{'aspect': 'enredo', 'sentiment': 'negativo', 'evidence': ?}], true)
+        ) t(review_id, aspects, is_recommendation)
+        """,
+        [SCRIPT],
+    )
 
     app.dependency_overrides[obter_conexao] = lambda: con
     yield TestClient(app)
@@ -64,6 +80,37 @@ def test_paginas_respondem(cliente: TestClient, caminho: str) -> None:
 def test_texto_de_review_e_escapado(cliente: TestClient) -> None:
     """Review é dado de terceiro (spec 05). Se o autoescape cair, isto tem que ficar vermelho."""
     corpo = cliente.get("/reviews").text
+
+    assert SCRIPT not in corpo
+    assert "&lt;script&gt;" in corpo
+
+
+def test_pagina_de_autor_mostra_aspectos_quando_ha_dado(cliente: TestClient) -> None:
+    corpo = cliente.get("/autores/Frank%20Herbert").text
+
+    assert "enredo" in corpo
+    assert "analisadas por IA" in corpo
+    assert "Pendente da F1" not in corpo
+
+
+def test_pagina_de_autor_sem_aspectos_nao_quebra(cliente: TestClient) -> None:
+    resposta = cliente.get("/autores/Autor%20Inexistente")
+
+    assert resposta.status_code == 200
+    assert "nenhuma avaliação" in resposta.text.lower()
+    assert "Pendente da F1" not in resposta.text
+
+
+def test_pagina_de_genero_mostra_aspectos_quando_ha_dado(cliente: TestClient) -> None:
+    corpo = cliente.get("/generos/Ficção").text
+
+    assert "enredo" in corpo
+    assert "Pendente da F1" not in corpo
+
+
+def test_evidencia_de_aspecto_e_escapada(cliente: TestClient) -> None:
+    """evidence vem de texto de terceiro — mesma exigência de escape de review_text (spec 05)."""
+    corpo = cliente.get("/autores/Frank%20Herbert").text
 
     assert SCRIPT not in corpo
     assert "&lt;script&gt;" in corpo
