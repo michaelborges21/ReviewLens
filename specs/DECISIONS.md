@@ -334,6 +334,58 @@ Consequências:
 − o teto de contagem é constante derivada do banco, não consulta viva; se a base crescer, o teto
   velho deixa a regra mais **rígida**, nunca mais frouxa, então a falha cai no lado seguro
 
+### ADR-014 — RAG semântico sobre a amostra, sem infraestrutura nova
+Data: 2026-09-28 · Status: **aceita**
+Contexto: o chat só respondia sobre autor/gênero nomeados na pergunta, via SQL determinístico —
+faltava a peça central da spec 03, pergunta livre por tema ("o que os leitores dizem sobre
+reviravoltas decepcionantes"), sem entidade nomeada. A ADR-005 já havia decidido a arquitetura
+(DuckDB acumula o papel de vector store); esta ADR é a implementação sobre a amostra enriquecida.
+
+**Escopo do corpus: `enrichment_sample` (19.949), não a base de 2.239.998** — mesma fronteira que
+`review_enriched` já respeita. Indexar a base inteira seria escopo maior sem necessidade
+demonstrada.
+
+**Medido antes de implementar, decidindo o desenho**:
+- embeddings via `embeddinggemma`: 5ms/chamada isolada, com o modelo já carregado;
+- execução real do indexador: **22.006 chunks** (19.949 reviews + fatias dos 7,8% que passam de
+  2.000 caracteres) em **8min55s a 11min40s** — mais lento que a medição isolada sugeria (overhead
+  real de HTTP em série), mas ainda minutos, não as 17h43min do `extract.py`;
+- busca por similaridade em ~28.000 vetores sem índice HNSW: ~88ms, confirmando a aposta da
+  ADR-005 de que varredura direta basta nesta escala;
+- `PRAGMA create_fts_index` do DuckDB não aceita `match_bm25` sob `QUALIFY` (exige função de
+  janela); a forma que funciona é subquery com `WHERE score IS NOT NULL`, parametrizada.
+
+Decisão: híbrido BM25 + denso fundidos por RRF, sem reranker cross-encoder (nenhum modelo local
+disponível) e sem MMR formal (diversidade por contador simples — 92% das reviews são chunk único,
+o segundo cálculo do MMR não se paga aqui). k=8, limiar de relevância 0,3 de similaridade de
+cosseno. Nova intenção `TEMA_LIVRE` no roteador, com gatilhos sobre o que os **leitores** pensam
+e exclusões que vencem o gatilho (opinião do próprio modelo, recomendação pessoal — ambas fora de
+escopo pela spec 05). Checagem de `TERMOS` (AUTOR/GENERO/VISAO_GERAL) continua vindo primeiro,
+preservando 100% do comportamento existente; filtro combinado (tema + entidade) só se aplica a
+nome próprio mencionado na pergunta, não à palavra literal "autor"/"gênero".
+
+**Bug real encontrado e corrigido contra o banco de verdade, não em teste sintético**: a checagem
+de "sem evidência suficiente" verificava só o item no topo do ranking fundido por RRF, não o
+melhor por similaridade densa. Com a pergunta real "o que os leitores criticam sobre finais
+decepcionantes", a busca densa achou um match genuíno de 0,591, mas o BM25 ranqueou em 1º um
+chunk com similaridade densa **0,0** (colisão de termo — pergunta em português contra reviews em
+inglês), que venceu a fusão RRF e escondeu o match bom. Corrigido: o limiar agora filtra todos os
+candidatos fundidos, não só o primeiro colocado. Teste de regressão em `tests/test_buscar.py`
+reproduz o cenário exato.
+Alternativas descartadas: vector store dedicado (ADR-005, não reaberta); rerank cross-encoder e
+MMR formal (sem recurso local disponível / sem ganho demonstrado na escala atual — podem entrar
+depois se a spec 06 mostrar necessidade).
+Consequências:
++ pergunta por tema livre sem entidade nomeada passa a ter resposta fundamentada, com citação
+  real verificável — item que faltava para a F2 (Q&A MVP) da spec 00
++ zero infraestrutura nova: mesma base DuckDB, mesmo Ollama já em uso
++ o guardrail de citação e o de número (ADR-013) funcionam sem alteração para os trechos de RAG —
+  só precisaram de um adaptador de formato, não de lógica nova
+− limiar de relevância (0,3) e teto de diversidade (2 por review, 3 por título) são estimativas
+  iniciais, a calibrar com uso real ou com a spec 06
+− sem MMR nem rerank, a ordenação final depende inteiramente da qualidade da fusão RRF — aceitável
+  na escala atual, revisar se a queixa de qualidade de ranking aparecer
+
 ## Log de sessão
 <!-- AAAA-MM-DD — o que foi feito, decisão tomada, próximo passo -->
 - 2026-09-21 — Reorganização do repositório: specs consolidadas em português em `specs/`,
@@ -497,3 +549,19 @@ Consequências:
   Achados da revisão técnica que ficam abertos: `src/bri/prompts/summarize.md` não tem consumidor
   nenhum e aponta para `summarize/mapreduce.py`, inexistente — mesma classe de problema que deixou o
   `score_text_mismatch` vazar de arquivo morto para produção.
+- 2026-09-28 — **RAG semântico implementado (ADR-014), fechando o item que faltava na F2 (Q&A
+  MVP)**: pergunta livre por tema, sem autor/gênero nomeado. `make index` roda de verdade contra o
+  banco (22.006 chunks, ~9 a 12 min), busca híbrida BM25+denso por RRF, nova intenção `TEMA_LIVRE`
+  no roteador. Bug real achado só contra o banco de verdade — a checagem de "sem evidência"
+  verificava o topo do ranking RRF, não o melhor por similaridade densa, e uma coincidência de
+  termo (pergunta em português, reviews em inglês) escondeu um match genuíno de 0,591; corrigido
+  para filtrar por relevância em todos os candidatos, com teste de regressão. Verificado com rigor:
+  o filtro por autor em busca combinada (nome próprio + tema) foi conferido cruzando os `review_id`
+  devolvidos contra `book_authors`, não só pelo conteúdo do texto parecer plausível.
+  Também corrigido no processo: tentei monitorar `make index` com `tail` manual enquanto rodava em
+  background e fui enganado por buffer de saída — interpretei "sem output" como travamento e matei
+  o processo aos 11 minutos, quando na verdade os 22.006 embeddings já tinham terminado e ele
+  estava na etapa final de gravação. Reexecutado do zero sem interromper; a ausência de checkpoint
+  no indexador (decisão registrada na ADR-014) tornou isso seguro — `CREATE OR REPLACE TABLE` só
+  roda depois de todos os embeddings computados, então a interrupção deixou a tabela pela metade
+  em vez de corrompida, e a releitura corrigiu sozinha.
