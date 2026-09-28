@@ -9,10 +9,9 @@ import duckdb
 from pydantic import ValidationError
 
 from bri.data.process import BANCO
-from bri.llm import ollama
+from bri.llm import ollama, prompts
 from bri.schemas.aspectos import AspectoCitado, ReviewEnrichment
 
-PROMPT_PATH = Path("src/bri/prompts/extract_review.md")
 SAIDA = Path("data/interim/aspectos.jsonl")
 LOG_DESCARTES = Path("reports/aspectos_descartados.jsonl")
 
@@ -22,23 +21,7 @@ MAX_TENTATIVAS = 2
 SCHEMA = ReviewEnrichment.model_json_schema()
 
 
-def _carregar_template() -> tuple[str, str]:
-    """Separa o front matter YAML do corpo, e o corpo em [system]/[user]."""
-    conteudo = PROMPT_PATH.read_text(encoding="utf-8")
-    _, _, corpo = conteudo.split("---", 2)
-    sistema, _, usuario = corpo.partition("[user]")
-    return sistema.replace("[system]", "").strip(), usuario.strip()
-
-
-_SISTEMA, _TEMPLATE_USUARIO = _carregar_template()
-
-
-def montar_prompt(review_id: str, score: float, texto: str) -> str:
-    return (
-        _TEMPLATE_USUARIO.replace("{{ review_id }}", review_id)
-        .replace("{{ score }}", str(score))
-        .replace("{{ review_text }}", texto)
-    )
+_PROMPT = prompts.carregar("extract_review")
 
 
 def registrar_descarte(review_id: str, motivo: str, detalhe: object) -> None:
@@ -60,8 +43,10 @@ def extrair(review: dict[str, str | float]) -> ReviewEnrichment | None:
     ultimo: ReviewEnrichment | None = None
 
     for _ in range(MAX_TENTATIVAS):
-        prompt = montar_prompt(review_id, float(review["rating"]), texto)
-        bruto = ollama.gerar_json(_SISTEMA, prompt, SCHEMA)
+        prompt = _PROMPT.montar(
+            review_id=review_id, score=str(float(review["rating"])), review_text=texto
+        )
+        bruto = ollama.gerar_json(_PROMPT.sistema, prompt, SCHEMA)
         try:
             ultimo = ReviewEnrichment.model_validate_json(bruto)
         except ValidationError:
