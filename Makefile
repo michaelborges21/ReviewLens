@@ -34,7 +34,10 @@ eval:
 	@echo "ainda não implementado — ver specs/06-evals.md"; exit 1
 
 eval-smoke:
-	@echo "ainda não implementado — ver specs/06-evals.md"; exit 1
+	uv run python -m evals.smoke_narracao
+
+red-team:
+	uv run python -m evals.red_team
 
 app:
 	uv run uvicorn app.main:app --reload
