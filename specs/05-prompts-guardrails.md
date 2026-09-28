@@ -3,7 +3,10 @@ Status: em implementação (v0.1) — prompts versionados em uso (`extract_revie
 `src/bri/guardrails/` ainda vazio
 
 ## Versionamento de prompts
-`src/bri/prompts/<nome>.yaml`: `id`, `version`, `model`, `system`, `template`, `few_shot_bank` (opcional), `output_schema`, `changelog`.
+`src/bri/prompts/<nome>.md` com front matter YAML (ADR-009): `version`, `used_by`, `schema`,
+`model`, `changelog`; corpo dividido em `[system]` e `[user]`. O carregador
+(`src/bri/llm/prompts.py`) recusa arquivo sem a seção `[user]` e sem `version` — antes disso o
+template de usuário vinha vazio em silêncio.
 Mudou prompt → incrementa versão → `make eval-smoke` → sem regressão ou justificativa em DECISIONS.
 
 ## Anatomia do system prompt (template)

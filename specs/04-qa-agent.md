@@ -42,14 +42,18 @@ class ConversationState(BaseModel):
 Filtros herdados sempre visíveis na UI e removíveis pelo usuário.
 
 ## Saída
+Implementado em `src/bri/schemas/qa.py` como `RespostaNarrada` (ADR-012):
+
 ```python
-class Answer(BaseModel):
-    answer: str
-    citations: list[Citation]      # review_id + trecho
-    sql_used: str | None           # transparência para o analista
-    confidence: Literal["alta", "média", "baixa"]
-    follow_ups: list[str]          # sugestões de próximas perguntas
+class RespostaNarrada(BaseModel):
+    resposta: str                  # 3 a 5 frases, linguagem de negócio
+    citacoes: list[Citacao]        # review_id + trecho, conferidos pelo guardrail
+    confianca: Literal["alta", "média", "baixa"]
+    proximas_perguntas: list[str]
 ```
+
+Sem `sql_used`: o SQL é nosso e já viaja em `roteador.Resposta.sql`, que a tela mostra no painel —
+pedir ao modelo que o repita gastaria token e convidaria à corrupção do texto.
 
 ## UI (FastAPI + Jinja2 + HTMX — ADR-010)
 Chat + painel com SQL executado e citações clicáveis + aba de entrevistas com botão de aprovação.
