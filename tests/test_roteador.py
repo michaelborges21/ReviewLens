@@ -3,6 +3,7 @@
 import duckdb
 import pytest
 
+from bri.agent import roteador
 from bri.agent.roteador import Intencao, classificar, resolver_entidade, responder
 
 
@@ -91,3 +92,38 @@ def test_recusa_explica_o_que_sabe_fazer(con: duckdb.DuckDBPyConnection) -> None
     assert resposta.intencao is Intencao.FORA_DE_ESCOPO
     assert resposta.sql is None
     assert "aspectos" in resposta.texto.lower()
+
+
+def test_classifica_tema_livre() -> None:
+    assert classificar("o que os leitores acham do final") is Intencao.TEMA_LIVRE
+
+
+def test_exclusao_vence_gatilho_ambiguo() -> None:
+    """ "voce acha" pede a opinião do MODELO — não pode virar tema livre só por citar leitores."""
+    pergunta = "o que voce acha que os leitores pensam sobre isso"
+
+    assert classificar(pergunta) is Intencao.FORA_DE_ESCOPO
+
+
+def test_responde_tema_livre_com_trechos(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    trechos_fake = [{"review_id": "1", "trecho": "final decepcionante", "score": 0.9}]
+    monkeypatch.setattr(roteador.buscar, "buscar", lambda *a, **k: trechos_fake)
+
+    resposta = responder(con, "o que os leitores acham do final")
+
+    assert resposta.intencao is Intencao.TEMA_LIVRE
+    assert resposta.trechos == trechos_fake
+    assert resposta.aspectos == {}
+
+
+def test_tema_livre_sem_evidencia_vira_fora_de_escopo(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(roteador.buscar, "buscar", lambda *a, **k: [])
+
+    resposta = responder(con, "o que os leitores acham do final")
+
+    assert resposta.intencao is Intencao.FORA_DE_ESCOPO
+    assert resposta.sql is None

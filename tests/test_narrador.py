@@ -34,6 +34,17 @@ def _resposta(intencao: Intencao = Intencao.AUTOR) -> Resposta:
     )
 
 
+def _resposta_com_trechos() -> Resposta:
+    trechos = [{"review_id": "99", "trecho": "final decepcionante", "score": 0.87}]
+    return Resposta(
+        Intencao.TEMA_LIVRE,
+        "O que os leitores dizem sobre o tema perguntado.",
+        None,
+        [],
+        trechos=trechos,
+    )
+
+
 def _narracao(review_id: str) -> str:
     return json.dumps(
         {
@@ -53,6 +64,30 @@ def test_narra_e_preserva_a_citacao(monkeypatch: pytest.MonkeyPatch) -> None:
     assert narrada is not None
     assert narrada.citacoes[0].review_id == "42"
     assert narrada.confianca == "média"
+
+
+def test_narra_a_partir_de_trechos_sem_tocar_aspectos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resposta.trechos preenchido é o caminho de RAG — não deve olhar para aspectos, vazio aqui."""
+    prompts_vistos: list[str] = []
+
+    def fake(sistema: str, prompt: str, schema: dict[str, Any], **_: object) -> str:
+        prompts_vistos.append(prompt)
+        return _narracao("99")
+
+    monkeypatch.setattr(narrador.ollama, "gerar_json", fake)
+
+    narrada = narrador.narrar("o que os leitores acham do final?", _resposta_com_trechos())
+
+    assert narrada is not None
+    assert narrada.citacoes[0].review_id == "99"
+    assert '<review id="99">final decepcionante</review>' in prompts_vistos[0]
+
+
+def test_guardrail_de_citacao_funciona_com_ids_de_trechos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Citar um id fora dos trechos enviados degrada, igual ao caminho de aspectos."""
+    monkeypatch.setattr(narrador.ollama, "gerar_json", lambda *a, **k: _narracao("999"))
+
+    assert narrador.narrar("o que os leitores acham do final?", _resposta_com_trechos()) is None
 
 
 def test_citacoes_repetidas_viram_uma(monkeypatch: pytest.MonkeyPatch) -> None:

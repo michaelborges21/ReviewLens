@@ -28,7 +28,7 @@ enrich-carregar:
 	uv run python -m bri.nlp.extract --carregar
 
 index:
-	@echo "ainda não implementado — ver specs/03-rag-knowledge-base.md"; exit 1
+	uv run python -m bri.retrieval.indexar
 
 eval:
 	@echo "ainda não implementado — ver specs/06-evals.md"; exit 1

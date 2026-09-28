@@ -8,6 +8,7 @@ from typing import Any
 import duckdb
 
 from bri.data import consultas
+from bri.retrieval import buscar
 from bri.texto import sem_acento
 
 
@@ -15,6 +16,7 @@ class Intencao(Enum):
     AUTOR = "autor"
     GENERO = "genero"
     VISAO_GERAL = "visao_geral"
+    TEMA_LIVRE = "tema_livre"
     FORA_DE_ESCOPO = "fora_de_escopo"
 
 
@@ -23,6 +25,32 @@ TERMOS = {
     Intencao.GENERO: ("genero", "categoria", "genre"),
     Intencao.VISAO_GERAL: ("quantas", "quantos", "total", "visao geral", "resumo da base"),
 }
+
+# tema livre é sobre o que os LEITORES pensam, não a opinião do modelo (spec 05 proíbe a segunda).
+# checado só depois de TERMOS não bater — preserva 100% o comportamento de AUTOR/GENERO/VISAO_GERAL.
+GATILHOS_TEMA_LIVRE = (
+    "leitores",
+    "leitor",
+    "acham",
+    "acha",
+    "criticam",
+    "critica",
+    "reclamam",
+    "reclama",
+    "elogiam",
+    "elogia",
+)
+# essas vencem qualquer gatilho acima: pedem a opinião do modelo ou uma recomendação pessoal,
+# ambas fora de escopo pela spec 05 — "qual sua opinião" não pode virar tema livre por causa de
+# nenhuma outra palavra que apareça na frase.
+EXCLUSOES_TEMA_LIVRE = (
+    "sua opiniao",
+    "voce acha",
+    "na sua visao",
+    "me recomenda",
+    "me indica",
+    "devo ler",
+)
 
 
 # Palavras que aparecem na pergunta mas nunca são nome de autor ou gênero. Sem essa lista, uma
@@ -45,6 +73,15 @@ class Resposta:
     dados: list[dict[str, Any]]
     # o dict de consultas.aspectos_do_*: o narrador precisa das citações e do tamanho da amostra
     aspectos: dict[str, Any] = field(default_factory=dict)
+    # trechos de bri.retrieval.buscar — forma própria, não reaproveita `aspectos`: um é "melhor
+    # exemplo por categoria", outro é "top-k por relevância"
+    trechos: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _e_tema_livre(limpa: str) -> bool:
+    if any(termo in limpa for termo in EXCLUSOES_TEMA_LIVRE):
+        return False
+    return any(re.search(rf"\b{termo}\b", limpa) for termo in GATILHOS_TEMA_LIVRE)
 
 
 def classificar(pergunta: str) -> Intencao:
@@ -53,6 +90,8 @@ def classificar(pergunta: str) -> Intencao:
     for intencao, termos in TERMOS.items():
         if any(re.search(rf"\b{termo}\b", limpa) for termo in termos):
             return intencao
+    if _e_tema_livre(limpa):
+        return Intencao.TEMA_LIVRE
     return Intencao.FORA_DE_ESCOPO
 
 
@@ -163,11 +202,27 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
             aspectos=aspectos,
         )
 
+    if intencao is Intencao.TEMA_LIVRE:
+        autor_filtro = resolver_entidade(con, Intencao.AUTOR, pergunta)
+        genero_filtro = resolver_entidade(con, Intencao.GENERO, pergunta)
+        trechos = buscar.buscar(con, pergunta, autor=autor_filtro, genero=genero_filtro)
+        if not trechos:
+            return Resposta(
+                Intencao.FORA_DE_ESCOPO,
+                "Não encontrei base suficiente nas avaliações para responder isso.",
+                None,
+                [],
+            )
+        return Resposta(
+            intencao, "O que os leitores dizem sobre o tema perguntado.", None, [], trechos=trechos
+        )
+
     return Resposta(
         Intencao.FORA_DE_ESCOPO,
         "Não consigo responder isso ainda. Hoje respondo sobre desempenho de um autor, "
         "distribuição de notas de um gênero, o que os leitores citam sobre eles "
-        "(aspectos extraídos por IA de uma amostra) e números gerais da base.",
+        "(aspectos extraídos por IA de uma amostra), busca por tema livre nas avaliações "
+        "e números gerais da base.",
         None,
         [],
     )

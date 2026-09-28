@@ -21,18 +21,31 @@ _PROMPT = prompts.carregar("qa_system")
 _SCHEMA = RespostaNarrada.model_json_schema()
 
 
-def _citacoes_do_contexto(aspectos: dict[str, Any]) -> tuple[str, set[str]]:
-    """Monta os blocos <review> e o conjunto de ids que o guardrail vai aceitar."""
-    blocos: list[str] = []
-    ids: set[str] = set()
-    for aspecto in aspectos.get("aspectos", [])[:MAX_CITACOES]:
-        review_id = aspecto.get("exemplo_negativo_review_id")
-        trecho = aspecto.get("exemplo_negativo")
-        if not review_id or not trecho:
-            continue
-        blocos.append(f'<review id="{review_id}">{trecho}</review>')
-        ids.add(str(review_id))
+def _blocos_e_ids(pares: list[tuple[str, str]]) -> tuple[str, set[str]]:
+    """Monta os blocos <review> e o conjunto de ids que o guardrail vai aceitar.
+
+    Formatação comum aos dois adaptadores abaixo — aspectos e trechos de RAG chegam em formas
+    diferentes, mas viram bloco de citação do mesmo jeito.
+    """
+    blocos = [f'<review id="{review_id}">{trecho}</review>' for review_id, trecho in pares]
+    ids = {str(review_id) for review_id, _ in pares}
     return "\n".join(blocos), ids
+
+
+def _citacoes_do_contexto(aspectos: dict[str, Any]) -> tuple[str, set[str]]:
+    """Adaptador para aspectos_do_autor/aspectos_do_genero: 1 exemplo negativo por categoria."""
+    pares = [
+        (aspecto["exemplo_negativo_review_id"], aspecto["exemplo_negativo"])
+        for aspecto in aspectos.get("aspectos", [])[:MAX_CITACOES]
+        if aspecto.get("exemplo_negativo_review_id") and aspecto.get("exemplo_negativo")
+    ]
+    return _blocos_e_ids(pares)
+
+
+def _citacoes_dos_trechos(trechos: list[dict[str, Any]]) -> tuple[str, set[str]]:
+    """Adaptador para bri.retrieval.buscar: top-k trechos já prontos para citar."""
+    pares = [(t["review_id"], t["trecho"]) for t in trechos[:MAX_CITACOES]]
+    return _blocos_e_ids(pares)
 
 
 def _numeros_em_linhas(dados: list[dict[str, Any]]) -> str:
@@ -85,9 +98,13 @@ def narrar(pergunta: str, resposta: Resposta) -> RespostaNarrada | None:
     if resposta.intencao is Intencao.FORA_DE_ESCOPO:
         return None
 
-    citacoes, ids_enviados = _citacoes_do_contexto(resposta.aspectos)
+    if resposta.trechos:
+        citacoes, ids_enviados = _citacoes_dos_trechos(resposta.trechos)
+        amostra = f"{len(resposta.trechos)} trechos recuperados por busca semântica na amostra"
+    else:
+        citacoes, ids_enviados = _citacoes_do_contexto(resposta.aspectos)
+        amostra = _tamanho_da_amostra(resposta.aspectos)
     numeros = _numeros_em_linhas(resposta.dados)
-    amostra = _tamanho_da_amostra(resposta.aspectos)
     prompt = _PROMPT.montar(pergunta=pergunta, numeros=numeros, amostra=amostra, citacoes=citacoes)
     # comparar contra o prompt inteiro alargaria o permitido: o bloco <estilo> fala em "3 a 5
     # frases", e aí um 5 inventado passaria como se fosse dado. Só os dados valem de lastro.
