@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.base import e_htmx, obter_conexao, templates
-from bri.agent import roteador
+from bri.agent import narrador, roteador
 from bri.data import consultas
 
 router = APIRouter()
@@ -112,13 +112,14 @@ def aprovar(request: Request, prefixo: Annotated[str, Form()]) -> HTMLResponse:
 
 @router.get("/chat", response_class=HTMLResponse)
 def chat(request: Request) -> HTMLResponse:
-    return _pagina(request, "chat.html", {"resposta": None, "pergunta": ""})
+    return _pagina(request, "chat.html", {"resposta": None, "narrada": None, "pergunta": ""})
 
 
 @router.post("/chat", response_class=HTMLResponse)
 def perguntar(request: Request, con: Conexao, pergunta: Annotated[str, Form()]) -> HTMLResponse:
     resposta = roteador.responder(con, pergunta)
-    contexto: dict[str, Any] = {"resposta": resposta, "pergunta": pergunta}
+    narrada = narrador.narrar(pergunta, resposta)
+    contexto: dict[str, Any] = {"resposta": resposta, "narrada": narrada, "pergunta": pergunta}
     if e_htmx(request):
         return _pagina(request, "_resposta_chat.html", contexto)
     return _pagina(request, "chat.html", contexto)

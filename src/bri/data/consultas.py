@@ -200,19 +200,27 @@ def aspectos_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str, A
         con,
         """
         WITH base AS (
-            SELECT re.aspects
+            SELECT re.review_id, re.aspects
             FROM review_enriched re
             JOIN enrichment_sample es ON es.review_id = re.review_id
             JOIN book_authors ba ON ba.title = es.title
             WHERE ba.author = ?
         ),
-        expandido AS (SELECT unnest(aspects) AS a FROM base)
-        SELECT (a).aspect AS aspecto,
-               count(*) AS n_mencoes,
-               100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
-                   AS pct_negativo,
-               any_value((a).evidence) FILTER (WHERE (a).sentiment = 'negativo') AS exemplo_negativo
-        FROM expandido GROUP BY 1 ORDER BY n_mencoes DESC
+        expandido AS (SELECT review_id, unnest(aspects) AS a FROM base),
+        -- trecho e id numa agregação só: duas separadas não garantem vir da mesma linha
+        agrupado AS (
+            SELECT (a).aspect AS aspecto,
+                   count(*) AS n_mencoes,
+                   100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
+                       AS pct_negativo,
+                   any_value({'trecho': (a).evidence, 'review_id': review_id})
+                       FILTER (WHERE (a).sentiment = 'negativo') AS negativo
+            FROM expandido GROUP BY 1
+        )
+        SELECT aspecto, n_mencoes, pct_negativo,
+               negativo.trecho AS exemplo_negativo,
+               negativo.review_id AS exemplo_negativo_review_id
+        FROM agrupado ORDER BY n_mencoes DESC
         """,
         [autor],
     )
@@ -240,19 +248,26 @@ def aspectos_do_genero(con: duckdb.DuckDBPyConnection, categoria: str) -> dict[s
         con,
         """
         WITH base AS (
-            SELECT re.aspects
+            SELECT re.review_id, re.aspects
             FROM review_enriched re
             JOIN enrichment_sample es ON es.review_id = re.review_id
             JOIN books b ON b.title = es.title
             WHERE list_contains(b.categories, ?)
         ),
-        expandido AS (SELECT unnest(aspects) AS a FROM base)
-        SELECT (a).aspect AS aspecto,
-               count(*) AS n_mencoes,
-               100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
-                   AS pct_negativo,
-               any_value((a).evidence) FILTER (WHERE (a).sentiment = 'negativo') AS exemplo_negativo
-        FROM expandido GROUP BY 1 ORDER BY n_mencoes DESC
+        expandido AS (SELECT review_id, unnest(aspects) AS a FROM base),
+        agrupado AS (
+            SELECT (a).aspect AS aspecto,
+                   count(*) AS n_mencoes,
+                   100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
+                       AS pct_negativo,
+                   any_value({'trecho': (a).evidence, 'review_id': review_id})
+                       FILTER (WHERE (a).sentiment = 'negativo') AS negativo
+            FROM expandido GROUP BY 1
+        )
+        SELECT aspecto, n_mencoes, pct_negativo,
+               negativo.trecho AS exemplo_negativo,
+               negativo.review_id AS exemplo_negativo_review_id
+        FROM agrupado ORDER BY n_mencoes DESC
         """,
         [categoria],
     )

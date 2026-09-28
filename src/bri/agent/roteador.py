@@ -1,14 +1,14 @@
 """Classificação determinística de intenção — o roteador da spec 04, ainda sem LLM."""
 
 import re
-import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
 import duckdb
 
 from bri.data import consultas
+from bri.texto import sem_acento
 
 
 class Intencao(Enum):
@@ -43,16 +43,13 @@ class Resposta:
     texto: str
     sql: str | None
     dados: list[dict[str, Any]]
-
-
-def _sem_acento(texto: str) -> str:
-    normalizado = unicodedata.normalize("NFD", texto.lower())
-    return "".join(c for c in normalizado if unicodedata.category(c) != "Mn")
+    # o dict de consultas.aspectos_do_*: o narrador precisa das citações e do tamanho da amostra
+    aspectos: dict[str, Any] = field(default_factory=dict)
 
 
 def classificar(pergunta: str) -> Intencao:
     """Só padrão de texto: sem LLM, sem custo e sempre com o mesmo resultado."""
-    limpa = _sem_acento(pergunta)
+    limpa = sem_acento(pergunta)
     for intencao, termos in TERMOS.items():
         if any(re.search(rf"\b{termo}\b", limpa) for termo in termos):
             return intencao
@@ -104,7 +101,7 @@ def _candidatos(pergunta: str) -> list[str]:
     Todos são testados contra o catálogo: apostar só no mais longo erra sempre que a pergunta
     tem uma palavra genérica comprida.
     """
-    uteis = [f for f in _fragmentos(pergunta) if _sem_acento(f) not in PALAVRAS_IGNORADAS]
+    uteis = [f for f in _fragmentos(pergunta) if sem_acento(f) not in PALAVRAS_IGNORADAS]
     return sorted(uteis, key=len, reverse=True)
 
 
@@ -148,6 +145,7 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
             " JOIN enrichment_sample es USING (review_id) JOIN book_authors USING (title)"
             " WHERE author = ?) ...",
             serie,
+            aspectos=aspectos,
         )
 
     if intencao is Intencao.GENERO and entidade:
@@ -162,6 +160,7 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
             " JOIN enrichment_sample es USING (review_id) JOIN books b USING (title)"
             " WHERE list_contains(categories, ?)) ...",
             dados["distribuicao"],
+            aspectos=aspectos,
         )
 
     return Resposta(

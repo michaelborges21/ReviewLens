@@ -153,6 +153,46 @@ def test_aspectos_do_autor_sem_review_enriched_nao_quebra() -> None:
     assert aspectos == {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": 1}
 
 
+def test_exemplo_negativo_vem_pareado_com_seu_review_id() -> None:
+    """Duas reviews concorrem no mesmo aspecto: o id devolvido tem de ser o dono daquele trecho.
+
+    Fixture própria porque o caso exige duas citações negativas no mesmo grupo, o que mudaria as
+    contagens dos outros testes.
+    """
+    con = duckdb.connect(":memory:")
+    con.execute("""
+        CREATE TABLE reviews AS SELECT * FROM (VALUES
+            (1, 'Dune', 2.0), (2, 'Dune', 3.0)
+        ) t(review_id, title, rating)
+    """)
+    con.execute("""
+        CREATE TABLE book_authors AS
+        SELECT * FROM (VALUES ('Dune', 'Frank Herbert')) t(title, author)
+    """)
+    con.execute("""
+        CREATE TABLE enrichment_sample AS SELECT * FROM (VALUES
+            (1, 'Dune', 'a trama ficou arrastado no meio'),
+            (2, 'Dune', 'achei tudo previsivel demais')
+        ) t(review_id, title, review_text)
+    """)
+    con.execute("""
+        CREATE TABLE review_enriched AS SELECT * FROM (VALUES
+            ('1', [{'aspect': 'enredo', 'sentiment': 'negativo', 'evidence': 'ficou arrastado'}]),
+            ('2', [{'aspect': 'enredo', 'sentiment': 'negativo', 'evidence': 'previsivel demais'}])
+        ) t(review_id, aspects)
+    """)
+
+    enredo = aspectos_do_autor(con, "Frank Herbert")["aspectos"][0]
+    dono = con.execute(
+        "SELECT review_text FROM enrichment_sample WHERE CAST(review_id AS VARCHAR) = ?",
+        [enredo["exemplo_negativo_review_id"]],
+    ).fetchone()
+
+    assert enredo["n_mencoes"] == 2
+    assert dono is not None
+    assert enredo["exemplo_negativo"] in dono[0]
+
+
 def test_aspectos_do_genero_agrega_por_categoria(con: duckdb.DuckDBPyConnection) -> None:
     aspectos = aspectos_do_genero(con, "Ficção")
 

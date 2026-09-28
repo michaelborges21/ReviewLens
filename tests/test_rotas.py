@@ -1,6 +1,8 @@
 """Testa as rotas com TestClient — e, principalmente, que texto de review não vira marcação."""
 
+import json
 from collections.abc import Iterator
+from urllib.error import URLError
 
 import duckdb
 import pytest
@@ -8,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.base import obter_conexao
 from app.main import app
+from bri.agent import narrador
 
 SCRIPT = "<script>alert('xss')</script>"
 
@@ -69,6 +72,16 @@ def cliente() -> Iterator[TestClient]:
     app.dependency_overrides.clear()
 
 
+@pytest.fixture(autouse=True)
+def sem_modelo_por_padrao(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Nenhum teste de rota chama o modelo real (AGENTS.md); quem quer narração põe seu fake."""
+
+    def indisponivel(*_a: object, **_k: object) -> str:
+        raise URLError("modelo desligado nos testes")
+
+    monkeypatch.setattr(narrador.ollama, "gerar_json", indisponivel)
+
+
 @pytest.mark.parametrize(
     "caminho",
     ["/", "/autores", "/generos", "/reviews", "/entrevistas", "/chat", "/autores/Frank%20Herbert"],
@@ -117,6 +130,43 @@ def test_evidencia_de_aspecto_e_escapada(cliente: TestClient) -> None:
 
 
 def test_chat_responde_e_mostra_sql(cliente: TestClient) -> None:
+    resposta = cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
+
+    assert resposta.status_code == 200
+    assert "Frank Herbert" in resposta.text
+
+
+def test_chat_narrado_mostra_prosa_e_citacao(
+    cliente: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    narracao = json.dumps(
+        {
+            "resposta": "Os leitores elogiam o enredo.",
+            "citacoes": [{"review_id": "1", "trecho": SCRIPT}],
+            "confianca": "alta",
+            "proximas_perguntas": ["E o ritmo?"],
+        }
+    )
+    monkeypatch.setattr(narrador.ollama, "gerar_json", lambda *a, **k: narracao)
+
+    corpo = cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"}).text
+
+    assert "Os leitores elogiam o enredo." in corpo
+    assert "review 1" in corpo
+    assert SCRIPT not in corpo  # trecho é texto de terceiro: escapado como review_text (spec 05)
+    assert "&lt;script&gt;" in corpo
+
+
+def test_chat_sem_modelo_responde_com_texto_deterministico(
+    cliente: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ollama fora do ar não pode virar 500 — é a regressão mais importante desta mudança."""
+
+    def cai(*_a: object, **_k: object) -> str:
+        raise URLError("connection refused")
+
+    monkeypatch.setattr(narrador.ollama, "gerar_json", cai)
+
     resposta = cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
 
     assert resposta.status_code == 200

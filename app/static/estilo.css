@@ -94,3 +94,4 @@ button.discreto { background: #fff; color: var(--destaque); }
 .chat-caixa { background: #fff; border: 1px solid var(--borda); border-radius: 6px; padding: 16px; }
 .sql { background: #f4f6f8; border: 1px solid var(--borda); border-radius: 4px; padding: 10px; font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; overflow-x: auto; }
 .recusa { color: #6b4a22; }
+.confianca { color: var(--destaque); font-weight: 600; }

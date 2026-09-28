@@ -1,5 +1,24 @@
 {% if resposta %}
+{% if narrada %}
+<p>{{ narrada.resposta }}</p>
+<p class="legenda">Confiança <span class="confianca">{{ narrada.confianca }}</span></p>
+
+{% if narrada.citacoes %}
+{% for citacao in narrada.citacoes %}
+<div class="review">
+  <div class="meta">review {{ citacao.review_id }}</div>
+  <div class="texto">{{ citacao.trecho }}</div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if narrada.proximas_perguntas %}
+<p class="legenda" style="margin-top:14px">Perguntas de continuação:</p>
+<ul>{% for proxima in narrada.proximas_perguntas %}<li>{{ proxima }}</li>{% endfor %}</ul>
+{% endif %}
+{% else %}
 <p{% if resposta.intencao.value == 'fora_de_escopo' %} class="recusa"{% endif %}>{{ resposta.texto }}</p>
+{% endif %}
 
 {% if resposta.dados %}
 <table>

@@ -5,8 +5,9 @@
 {% block conteudo %}
 <h2>Perguntar</h2>
 <p class="legenda">
-  Hoje as respostas vêm de consulta SQL determinística, sem modelo de linguagem e sem custo.
-  Toda resposta mostra a consulta que a produziu.
+  Números e citações vêm de consulta SQL; o texto é redigido por um modelo local, sem custo por
+  token e sem enviar dado para fora desta máquina. Toda resposta mostra a consulta que a produziu,
+  e cada afirmação sobre leitores cita o review_id de onde saiu.
 </p>
 
 <div class="chat-caixa">
@@ -23,8 +24,9 @@
 </div>
 
 <div class="pendente">
-  <strong>Pendente da F1 e F2.</strong> Perguntas sobre o que os leitores dizem — aspectos,
-  sentimento, resumos com citação — dependem do enriquecimento (spec 02) e do RAG (spec 03).
-  Preferi recusar com clareza a responder com texto inventado.
+  <strong>Ainda em construção.</strong> O roteador entende perguntas sobre um autor, sobre um gênero
+  e sobre números gerais da base. Busca semântica por tema livre (spec 03) e memória entre perguntas
+  (spec 04) ainda não existem — fora desse escopo ele recusa, em vez de inventar. Se o modelo local
+  estiver fora do ar, a resposta sai em formato resumido, sem prosa.
 </div>
 {% endblock %}

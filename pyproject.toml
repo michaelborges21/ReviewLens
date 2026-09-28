@@ -11,6 +11,7 @@ dependencies = [
     "matplotlib>=3.9",
     "polars>=1.17",
     "pyarrow>=18",
+    "pydantic>=2.9",
     "python-multipart>=0.0.12",
     "uvicorn[standard]>=0.32",
 ]
