@@ -1,6 +1,8 @@
 # 04 — Agente de Q&A, ferramentas e estado
-Status: em implementação (v0.1) — roteador determinístico pronto e testado; tools, estado tipado e
-loop ReAct pendentes · Framework: **loop explícito** (ADR-003, aceita)
+Status: em implementação (v0.1) — roteador determinístico pronto e testado; `find_interview_candidates`
+e `export_report` implementados (2026-09-29); `sql_query`/`search_reviews` como tools formais do
+loop ReAct, `ConversationState` e o loop de 5 passos seguem pendentes · Framework: **loop
+explícito** (ADR-003, aceita)
 
 ## Arquitetura
 ```
@@ -22,7 +24,7 @@ Roteamento determinístico primeiro; ReAct só quando a pergunta combina fontes.
 | `search_reviews` | busca híbrida | k ≤ 50; filtros tipados | não |
 | `get_summary` | lê `entity_summaries` | só leitura | não |
 | `find_interview_candidates` | ranking de usuários | retorna IDs pseudonimizados + justificativa | **sim** para revelar/exportar |
-| `export_report` | gera CSV/MD | escreve só em `reports/exports/` | **sim** |
+| `export_report` | gera CSV | escreve só em `reports/exports/` | **sim** |
 
 Nenhuma tool tem shell, rede arbitrária ou escrita fora do diretório permitido.
 

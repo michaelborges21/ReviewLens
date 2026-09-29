@@ -1,5 +1,8 @@
 # 00 — Visão geral, hipóteses e roadmap
-Status: aprovada (v0.1) · Dono: Michael · Revisar a cada fase concluída · F0 e F1 concluídas
+Status: aprovada (v0.1) · Dono: Michael · Revisar a cada fase concluída · F0 e F1 concluídas.
+F2 e F3 têm o entregável de código completo (roteador+SQL+RAG+UI; ranking+HITL+export), mas
+nenhuma das duas está concluída pelo critério do roadmap: os critérios de saída (golden set ≥
+meta; lista validada por humano) exigem ação humana, não só código.
 
 ## Problema
 Analistas de uma editora exploram avaliações de livros manualmente. É lento, não escala e depende de leitura humana.
