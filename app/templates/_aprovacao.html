@@ -1,1 +1,11 @@
-<span class="recusa">Aprovado: <code>{{ prefixo }}…</code> — export fica para a F3.</span>
+{% if candidato %}
+<span class="recusa">
+  Aprovado e exportado: <code>{{ prefixo }}…</code> — linha gravada em
+  <code>reports/exports/</code>.
+</span>
+{% else %}
+<span class="recusa">
+  Não encontrado: <code>{{ prefixo }}…</code> não corresponde mais a um candidato elegível.
+  Nada foi exportado.
+</span>
+{% endif %}

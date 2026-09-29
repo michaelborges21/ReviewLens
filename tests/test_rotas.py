@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from pathlib import Path
 from urllib.error import URLError
 
 import duckdb
@@ -10,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.base import obter_conexao
 from app.main import app
-from bri.agent import narrador
+from bri.agent import exportar, narrador
 
 SCRIPT = "<script>alert('xss')</script>"
 
@@ -192,3 +193,29 @@ def test_entrevistas_mostra_pseudonimo_truncado(cliente: TestClient) -> None:
 
     assert "h1abcdef0123" in corpo
     assert "h1abcdef012345" not in corpo
+
+
+def test_aprovar_exporta_o_candidato(
+    cliente: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(exportar, "RAIZ_EXPORTS", tmp_path)
+
+    resposta = cliente.post("/entrevistas/aprovar", data={"prefixo": "h1abcdef0123"})
+
+    assert resposta.status_code == 200
+    assert "exportado" in resposta.text.lower()
+    arquivos = list(tmp_path.glob("candidatos_entrevista_*.csv"))
+    assert len(arquivos) == 1
+    assert "h1abcdef012345" in arquivos[0].read_text(encoding="utf-8")
+
+
+def test_aprovar_prefixo_inexistente_nao_exporta(
+    cliente: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(exportar, "RAIZ_EXPORTS", tmp_path)
+
+    resposta = cliente.post("/entrevistas/aprovar", data={"prefixo": "zzz"})
+
+    assert resposta.status_code == 200
+    assert "não encontrado" in resposta.text.lower()
+    assert list(tmp_path.glob("*.csv")) == []

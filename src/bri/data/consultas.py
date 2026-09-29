@@ -172,6 +172,30 @@ def candidatos_a_entrevista(
     )
 
 
+def candidato_por_prefixo(con: duckdb.DuckDBPyConnection, prefixo: str) -> dict[str, Any] | None:
+    """Busca o candidato completo a partir do prefixo mostrado na tela.
+
+    Reaplica os critérios de candidatos_a_entrevista — um prefixo não pode contornar
+    elegibilidade. Mais de um match (colisão de prefixo, praticamente impossível em ~1M usuários)
+    é tratado como "não encontrado", não como escolher a primeira linha arbitrariamente.
+    """
+    linhas = _linhas(
+        con,
+        """
+        SELECT user_hash,
+               n_reviews,
+               nota_media,
+               comprimento_mediano,
+               abs(nota_media - 3.0) AS distancia_do_meio
+        FROM users_agg
+        WHERE n_reviews >= 3 AND comprimento_mediano IS NOT NULL
+          AND user_hash LIKE ? || '%'
+        """,
+        [prefixo],
+    )
+    return linhas[0] if len(linhas) == 1 else None
+
+
 def _tabela_existe(con: duckdb.DuckDBPyConnection, nome: str) -> bool:
     """review_enriched só existe após `make enrich-carregar`; `make data` recria o banco sem ela."""
     return bool(

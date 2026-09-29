@@ -9,6 +9,7 @@ from bri.data.consultas import (
     aspectos_do_autor,
     aspectos_do_genero,
     buscar_reviews,
+    candidato_por_prefixo,
     candidatos_a_entrevista,
     numeros_gerais,
     performance_do_autor,
@@ -51,7 +52,8 @@ def con() -> duckdb.DuckDBPyConnection:
     """)
     con.execute("""
         CREATE TABLE users_agg AS SELECT * FROM (VALUES
-            ('h1', 5, 3.0, 800.0), ('h2', 2, 5.0, 100.0)
+            ('h1', 5, 3.0, 800.0), ('h2', 2, 5.0, 100.0),
+            ('h3abcdef000001', 4, 3.2, 500.0), ('h3abcdef000002', 6, 2.8, 600.0)
         ) t(user_hash, n_reviews, nota_media, comprimento_mediano)
     """)
     con.execute("""
@@ -113,6 +115,27 @@ def test_candidatos_preferem_quem_escreve_mais(con: duckdb.DuckDBPyConnection) -
     candidatos: list[dict[str, Any]] = candidatos_a_entrevista(con)
 
     assert candidatos[0]["user_hash"] == "h1"
+
+
+def test_candidato_por_prefixo_encontra_pelo_prefixo(con: duckdb.DuckDBPyConnection) -> None:
+    candidato = candidato_por_prefixo(con, "h1")
+
+    assert candidato is not None
+    assert candidato["user_hash"] == "h1"
+
+
+def test_candidato_por_prefixo_inexistente_devolve_none(con: duckdb.DuckDBPyConnection) -> None:
+    assert candidato_por_prefixo(con, "zzz") is None
+
+
+def test_candidato_por_prefixo_reaplica_elegibilidade(con: duckdb.DuckDBPyConnection) -> None:
+    """h2 tem só 2 avaliações — o prefixo não pode contornar o piso de 3 que a tela já aplica."""
+    assert candidato_por_prefixo(con, "h2") is None
+
+
+def test_candidato_por_prefixo_ambiguo_devolve_none(con: duckdb.DuckDBPyConnection) -> None:
+    """Dois usuários com o mesmo prefixo de 12 chars: tratado como não encontrado, não escolhido."""
+    assert candidato_por_prefixo(con, "h3abcdef0000") is None
 
 
 def test_aspectos_do_autor_agrega_por_categoria(con: duckdb.DuckDBPyConnection) -> None:

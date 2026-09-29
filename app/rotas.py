@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.base import e_htmx, obter_conexao, templates
-from bri.agent import narrador, roteador
+from bri.agent import exportar, narrador, roteador
 from bri.data import consultas
 
 router = APIRouter()
@@ -101,13 +101,19 @@ def entrevistas(request: Request, con: Conexao) -> HTMLResponse:
 
 
 @router.post("/entrevistas/aprovar", response_class=HTMLResponse)
-def aprovar(request: Request, prefixo: Annotated[str, Form()]) -> HTMLResponse:
-    """Gate humano da spec 04. Recebe só o prefixo — o pseudônimo inteiro não vai ao navegador.
+def aprovar(request: Request, con: Conexao, prefixo: Annotated[str, Form()]) -> HTMLResponse:
+    """Gate humano da spec 04 para as duas linhas 'sim': revelar o candidato e exportá-lo.
 
-    Aprovar não revela nada a mais nem persiste: o export é F3, e lá a referência estável deve
-    ser um token do lado do servidor, não o identificador no HTML.
+    O prefixo do formulário é só chave de busca — a linha completa vem de nova consulta ao banco,
+    reaplicando os critérios de elegibilidade, nunca dos dados que o navegador mandou.
     """
-    return _pagina(request, "_aprovacao.html", {"prefixo": prefixo})
+    candidato = consultas.candidato_por_prefixo(con, prefixo)
+    if candidato is None:
+        return _pagina(request, "_aprovacao.html", {"prefixo": prefixo, "candidato": None})
+    # raiz explícito, não o default do parâmetro: o default é capturado na definição da função,
+    # então testar sobrescrevendo exportar.RAIZ_EXPORTS via monkeypatch não o alcançaria.
+    exportar.exportar_candidato(candidato, raiz=exportar.RAIZ_EXPORTS)
+    return _pagina(request, "_aprovacao.html", {"prefixo": prefixo, "candidato": candidato})
 
 
 @router.get("/chat", response_class=HTMLResponse)

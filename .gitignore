@@ -1,5 +1,7 @@
 /data/
 /docs/
+# user_hash inteiro de leitor real, exportado após aprovação humana (spec 04) — nunca versionar.
+/reports/exports/
 .env
 .env.*
 !.env.example
