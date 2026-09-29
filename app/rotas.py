@@ -7,12 +7,25 @@ from fastapi import APIRouter, Depends, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
 from app.base import e_htmx, obter_conexao, templates
-from bri.agent import exportar, narrador, roteador
+from bri.agent import conversa, exportar, narrador, roteador
 from bri.data import consultas
 
 router = APIRouter()
 
 Conexao = Annotated[duckdb.DuckDBPyConnection, Depends(obter_conexao)]
+
+NOME_COOKIE = "sessao_id"
+
+
+def _sessao_id(request: Request) -> str:
+    return request.cookies.get(NOME_COOKIE) or conversa.novo_id_sessao()
+
+
+def _com_cookie(resposta: HTMLResponse, sessao_id: str, request: Request) -> HTMLResponse:
+    """Só reescreve o cookie quando o id mudou — evita resetar validade a cada resposta."""
+    if request.cookies.get(NOME_COOKIE) != sessao_id:
+        resposta.set_cookie(NOME_COOKIE, sessao_id, httponly=True, samesite="lax")
+    return resposta
 
 
 def _pagina(request: Request, nome: str, contexto: dict[str, Any]) -> HTMLResponse:
@@ -118,14 +131,53 @@ def aprovar(request: Request, con: Conexao, prefixo: Annotated[str, Form()]) -> 
 
 @router.get("/chat", response_class=HTMLResponse)
 def chat(request: Request) -> HTMLResponse:
-    return _pagina(request, "chat.html", {"resposta": None, "narrada": None, "pergunta": ""})
+    sessao_id = _sessao_id(request)
+    estado = conversa.obter(sessao_id)
+    contexto = {
+        "resposta": None,
+        "narrada": None,
+        "pergunta": "",
+        "turnos": estado.turnos,
+        "entidade_herdada": estado.ultima_entidade,
+    }
+    return _com_cookie(_pagina(request, "chat.html", contexto), sessao_id, request)
 
 
 @router.post("/chat", response_class=HTMLResponse)
 def perguntar(request: Request, con: Conexao, pergunta: Annotated[str, Form()]) -> HTMLResponse:
-    resposta = roteador.responder(con, pergunta)
+    sessao_id = _sessao_id(request)  # cobre POST direto sem GET prévio (bookmark, teste)
+    estado = conversa.obter(sessao_id)
+
+    resposta = roteador.responder(con, pergunta, entidade_herdada=estado.ultima_entidade)
     narrada = narrador.narrar(pergunta, resposta)
-    contexto: dict[str, Any] = {"resposta": resposta, "narrada": narrada, "pergunta": pergunta}
-    if e_htmx(request):
-        return _pagina(request, "_resposta_chat.html", contexto)
-    return _pagina(request, "chat.html", contexto)
+
+    texto_final = narrada.resposta if narrada else resposta.texto
+    conversa.registrar_turno(sessao_id, pergunta, texto_final)
+    if resposta.entidade_herdavel:
+        conversa.atualizar_entidade(sessao_id, *resposta.entidade_herdavel)
+
+    contexto: dict[str, Any] = {
+        "resposta": resposta,
+        "narrada": narrada,
+        "pergunta": pergunta,
+        "turnos": conversa.obter(sessao_id).turnos,
+        "entidade_herdada": conversa.obter(sessao_id).ultima_entidade,
+    }
+    pagina = "_resposta_chat.html" if e_htmx(request) else "chat.html"
+    return _com_cookie(_pagina(request, pagina, contexto), sessao_id, request)
+
+
+@router.post("/chat/limpar-filtro", response_class=HTMLResponse)
+def limpar_filtro(request: Request) -> HTMLResponse:
+    sessao_id = _sessao_id(request)
+    conversa.limpar_entidade(sessao_id)
+    estado = conversa.obter(sessao_id)
+    contexto = {
+        "resposta": None,
+        "narrada": None,
+        "pergunta": "",
+        "turnos": estado.turnos,
+        "entidade_herdada": None,
+    }
+    pagina = "_resposta_chat.html" if e_htmx(request) else "chat.html"
+    return _com_cookie(_pagina(request, pagina, contexto), sessao_id, request)

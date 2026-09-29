@@ -1,3 +1,10 @@
+{% for turno in (turnos[:-1] if resposta else turnos) %}
+<div class="turno-antigo">
+  <p class="pergunta-anterior">Você: {{ turno.pergunta }}</p>
+  <p>{{ turno.resposta_texto }}</p>
+</div>
+{% endfor %}
+
 {% if resposta %}
 {% if narrada %}
 <p>{{ narrada.resposta }}</p>

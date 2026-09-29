@@ -11,6 +11,16 @@
 </p>
 
 <div class="chat-caixa">
+  {% if entidade_herdada %}
+  <div class="filtro-herdado">
+    Usando filtro herdado: <strong>{{ entidade_herdada[0].value }} = {{ entidade_herdada[1] }}</strong>
+    <form method="post" action="/chat/limpar-filtro" hx-post="/chat/limpar-filtro"
+          hx-target="#resposta" hx-swap="innerHTML" style="display:inline">
+      <button type="submit" class="link-botao">limpar</button>
+    </form>
+  </div>
+  {% endif %}
+
   <form method="post" action="/chat" hx-post="/chat" hx-target="#resposta" hx-swap="innerHTML">
     <label for="pergunta">Sua pergunta</label>
     <input type="text" name="pergunta" id="pergunta" style="width: 70%"
@@ -24,9 +34,11 @@
 </div>
 
 <div class="pendente">
-  <strong>Ainda em construção.</strong> O roteador entende perguntas sobre um autor, sobre um gênero
-  e sobre números gerais da base. Busca semântica por tema livre (spec 03) e memória entre perguntas
-  (spec 04) ainda não existem — fora desse escopo ele recusa, em vez de inventar. Se o modelo local
-  estiver fora do ar, a resposta sai em formato resumido, sem prosa.
+  <strong>Ainda em construção.</strong> O roteador entende perguntas sobre um autor, sobre um
+  gênero, busca por tema livre nas avaliações (spec 03) e números gerais da base — e lembra a
+  última entidade da conversa (spec 04) para uma pergunta de acompanhamento sem nomear ninguém de
+  novo. Perguntas mistas combinando várias ferramentas numa resposta só ainda não existem — fora
+  desse escopo ele recusa, em vez de inventar. Se o modelo local estiver fora do ar, a resposta sai
+  em formato resumido, sem prosa.
 </div>
 {% endblock %}

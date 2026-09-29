@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.base import obter_conexao
 from app.main import app
-from bri.agent import exportar, narrador
+from bri.agent import conversa, exportar, narrador
 
 SCRIPT = "<script>alert('xss')</script>"
 
@@ -81,6 +81,12 @@ def sem_modelo_por_padrao(monkeypatch: pytest.MonkeyPatch) -> None:
         raise URLError("modelo desligado nos testes")
 
     monkeypatch.setattr(narrador.ollama, "gerar_json", indisponivel)
+
+
+@pytest.fixture(autouse=True)
+def resetar_estado_conversa() -> None:
+    """Sessão em memória é dict módulo-level: sem isto, um teste vazaria estado para o seguinte."""
+    conversa.SESSOES.clear()
 
 
 @pytest.mark.parametrize(
@@ -178,6 +184,58 @@ def test_chat_recusa_fora_de_escopo(cliente: TestClient) -> None:
     resposta = cliente.post("/chat", data={"pergunta": "me indica um livro para viajar"})
 
     assert "Não consigo responder isso ainda" in resposta.text
+
+
+def test_chat_segunda_pergunta_herda_filtro_de_autor(
+    cliente: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from bri.agent import roteador
+
+    monkeypatch.setattr(
+        roteador.buscar,
+        "buscar",
+        lambda *a, **k: [{"review_id": "1", "trecho": "texto", "score": 0.9}],
+    )
+
+    cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
+    resposta = cliente.post("/chat", data={"pergunta": "o que os leitores criticam?"})
+
+    assert "filtro herdado" in resposta.text.lower()
+    assert "Frank Herbert" in resposta.text
+
+
+def test_chat_duas_sessoes_nao_compartilham_estado(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.main import app
+    from bri.agent import roteador
+
+    monkeypatch.setattr(
+        roteador.buscar,
+        "buscar",
+        lambda *a, **k: [{"review_id": "1", "trecho": "texto", "score": 0.9}],
+    )
+
+    c1, c2 = TestClient(app), TestClient(app)
+    c1.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
+    resposta = c2.post("/chat", data={"pergunta": "o que os leitores criticam?"})
+
+    assert "filtro herdado" not in resposta.text.lower()
+
+
+def test_chat_cookie_criado_na_primeira_visita_e_mantido(cliente: TestClient) -> None:
+    primeira = cliente.get("/chat")
+    assert "sessao_id" in primeira.cookies
+
+    segunda = cliente.get("/chat")
+    assert segunda.cookies.get("sessao_id") is None  # não reescreve o mesmo id
+
+
+def test_chat_limpar_filtro_remove_entidade_herdada(cliente: TestClient) -> None:
+    cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
+    assert "filtro herdado" in cliente.get("/chat").text.lower()
+
+    cliente.post("/chat/limpar-filtro")
+
+    assert "filtro herdado" not in cliente.get("/chat").text.lower()
 
 
 def test_api_devolve_json(cliente: TestClient) -> None:

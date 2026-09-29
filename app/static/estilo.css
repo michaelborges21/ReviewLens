@@ -95,3 +95,24 @@ button.discreto { background: #fff; color: var(--destaque); }
 .sql { background: #f4f6f8; border: 1px solid var(--borda); border-radius: 4px; padding: 10px; font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; overflow-x: auto; }
 .recusa { color: #6b4a22; }
 .confianca { color: var(--destaque); font-weight: 600; }
+
+.filtro-herdado {
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--suave);
+}
+.turno-antigo { color: var(--suave); margin-bottom: 14px; }
+.turno-antigo .pergunta-anterior { font-weight: 600; color: var(--tinta); margin-bottom: 2px; }
+.link-botao {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--destaque);
+  text-decoration: underline;
+  font-size: inherit;
+  cursor: pointer;
+}

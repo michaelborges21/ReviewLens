@@ -76,6 +76,11 @@ class Resposta:
     # trechos de bri.retrieval.buscar — forma própria, não reaproveita `aspectos`: um é "melhor
     # exemplo por categoria", outro é "top-k por relevância"
     trechos: list[dict[str, Any]] = field(default_factory=list)
+    # (tipo, valor) da entidade que este turno resolveu — a rota usa isto para lembrar na sessão.
+    # Guarda o TIPO real (AUTOR/GENERO), não `intencao`: uma Resposta TEMA_LIVRE que herdou autor
+    # não pode salvar (TEMA_LIVRE, valor), senão o próximo turno TEMA_LIVRE comparando tipo falha
+    # e a herança quebra na segunda pergunta seguida sem nome.
+    entidade_herdavel: tuple[Intencao, str] | None = None
 
 
 def _e_tema_livre(limpa: str) -> bool:
@@ -144,6 +149,17 @@ def _candidatos(pergunta: str) -> list[str]:
     return sorted(uteis, key=len, reverse=True)
 
 
+def _entidade_ou_herdada(
+    entidade: str | None, tipo: Intencao, entidade_herdada: tuple[Intencao, str] | None
+) -> str | None:
+    """Usa a entidade da pergunta atual; sem ela, herda só se o tipo bater com o herdado."""
+    if entidade is not None:
+        return entidade
+    if entidade_herdada is not None and entidade_herdada[0] is tipo:
+        return entidade_herdada[1]
+    return None
+
+
 def _resumo_de_aspectos(aspectos: dict[str, Any]) -> str:
     """Cita o aspecto mais mencionado, ou vazio se a amostra não cobre a entidade."""
     if not aspectos["aspectos"]:
@@ -156,8 +172,16 @@ def _resumo_de_aspectos(aspectos: dict[str, Any]) -> str:
     )
 
 
-def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
-    """Responde o que dá para responder com SQL hoje; recusa o resto em vez de inventar."""
+def responder(
+    con: duckdb.DuckDBPyConnection,
+    pergunta: str,
+    entidade_herdada: tuple[Intencao, str] | None = None,
+) -> Resposta:
+    """Responde o que dá para responder com SQL hoje; recusa o resto em vez de inventar.
+
+    `entidade_herdada` vem da sessão de conversa (bri.agent.conversa): quando a pergunta atual
+    não nomeia autor/gênero nenhum, herda o da pergunta anterior, se o tipo bater.
+    """
     intencao = classificar(pergunta)
 
     if intencao is Intencao.VISAO_GERAL:
@@ -170,6 +194,7 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
         )
 
     entidade = resolver_entidade(con, intencao, pergunta)
+    entidade = _entidade_ou_herdada(entidade, intencao, entidade_herdada)
 
     if intencao is Intencao.AUTOR and entidade:
         dados = consultas.performance_do_autor(con, entidade)
@@ -185,6 +210,7 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
             " WHERE author = ?) ...",
             serie,
             aspectos=aspectos,
+            entidade_herdavel=(Intencao.AUTOR, entidade),
         )
 
     if intencao is Intencao.GENERO and entidade:
@@ -200,11 +226,16 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
             " WHERE list_contains(categories, ?)) ...",
             dados["distribuicao"],
             aspectos=aspectos,
+            entidade_herdavel=(Intencao.GENERO, entidade),
         )
 
     if intencao is Intencao.TEMA_LIVRE:
-        autor_filtro = resolver_entidade(con, Intencao.AUTOR, pergunta)
-        genero_filtro = resolver_entidade(con, Intencao.GENERO, pergunta)
+        autor_filtro = _entidade_ou_herdada(
+            resolver_entidade(con, Intencao.AUTOR, pergunta), Intencao.AUTOR, entidade_herdada
+        )
+        genero_filtro = _entidade_ou_herdada(
+            resolver_entidade(con, Intencao.GENERO, pergunta), Intencao.GENERO, entidade_herdada
+        )
         trechos = buscar.buscar(con, pergunta, autor=autor_filtro, genero=genero_filtro)
         if not trechos:
             return Resposta(
@@ -213,8 +244,20 @@ def responder(con: duckdb.DuckDBPyConnection, pergunta: str) -> Resposta:
                 None,
                 [],
             )
+        herdavel = (
+            (Intencao.AUTOR, autor_filtro)
+            if autor_filtro
+            else (Intencao.GENERO, genero_filtro)
+            if genero_filtro
+            else None
+        )
         return Resposta(
-            intencao, "O que os leitores dizem sobre o tema perguntado.", None, [], trechos=trechos
+            intencao,
+            "O que os leitores dizem sobre o tema perguntado.",
+            None,
+            [],
+            trechos=trechos,
+            entidade_herdavel=herdavel,
         )
 
     return Resposta(

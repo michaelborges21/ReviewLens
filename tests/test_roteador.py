@@ -127,3 +127,63 @@ def test_tema_livre_sem_evidencia_vira_fora_de_escopo(
 
     assert resposta.intencao is Intencao.FORA_DE_ESCOPO
     assert resposta.sql is None
+
+
+def test_tema_livre_herda_autor_da_entidade_anterior(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ "o que os leitores criticam?" não nomeia ninguém — deve herdar o autor do turno anterior."""
+    chamadas: list[dict] = []
+
+    def fake_buscar(con, pergunta, autor=None, genero=None):
+        chamadas.append({"autor": autor, "genero": genero})
+        return [{"review_id": "1", "trecho": "arrastado", "score": 0.9}]
+
+    monkeypatch.setattr(roteador.buscar, "buscar", fake_buscar)
+
+    responder(
+        con, "o que os leitores criticam?", entidade_herdada=(Intencao.AUTOR, "Frank Herbert")
+    )
+
+    assert chamadas[0] == {"autor": "Frank Herbert", "genero": None}
+
+
+def test_genero_explicito_nao_herda_quando_ja_nomeado(con: duckdb.DuckDBPyConnection) -> None:
+    """Gênero nomeado na própria pergunta vence qualquer entidade herdada de outro tipo."""
+    resposta = responder(
+        con,
+        "qual a distribuição de notas no gênero Ficção",
+        entidade_herdada=(Intencao.AUTOR, "Frank Herbert"),
+    )
+
+    assert resposta.intencao is Intencao.GENERO
+    assert resposta.entidade_herdavel == (Intencao.GENERO, "Ficção")
+
+
+def test_autor_sem_nome_herda_autor_anterior(con: duckdb.DuckDBPyConnection) -> None:
+    """ "esse autor" não é nome: a pergunta ainda classifica AUTOR e deve herdar o anterior."""
+    resposta = responder(
+        con, "o que mais esse autor escreveu", entidade_herdada=(Intencao.AUTOR, "Frank Herbert")
+    )
+
+    assert resposta.intencao is Intencao.AUTOR
+    assert "Frank Herbert" in resposta.texto
+
+
+def test_tema_livre_herdado_preserva_tipo_para_proximo_encadeamento(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Encadeamento de dois saltos: a Resposta TEMA_LIVRE que herdou autor tem que devolver
+    entidade_herdavel=(AUTOR, ...), não (TEMA_LIVRE, ...) — senão a PRÓXIMA pergunta sem nome
+    compara tipo errado e a herança quebra na segunda rodada seguida."""
+    monkeypatch.setattr(
+        roteador.buscar,
+        "buscar",
+        lambda *a, **k: [{"review_id": "1", "trecho": "arrastado", "score": 0.9}],
+    )
+
+    resposta = responder(
+        con, "o que os leitores criticam?", entidade_herdada=(Intencao.AUTOR, "Frank Herbert")
+    )
+
+    assert resposta.entidade_herdavel == (Intencao.AUTOR, "Frank Herbert")
