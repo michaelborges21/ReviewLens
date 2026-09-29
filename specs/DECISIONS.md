@@ -565,3 +565,22 @@ Consequências:
   no indexador (decisão registrada na ADR-014) tornou isso seguro — `CREATE OR REPLACE TABLE` só
   roda depois de todos os embeddings computados, então a interrupção deixou a tabela pela metade
   em vez de corrompida, e a releitura corrigiu sozinha.
+- 2026-09-29 — **Recorte de `ConversationState` (spec 04): memória de conversa no chat.** Antes,
+  cada pergunta em `/chat` era isolada — sem cookie, sem sessão, sem histórico visível. Implementado
+  só o pedaço que entrega valor real: `src/bri/agent/conversa.py` guarda em memória de processo
+  (dict módulo-level, chave = cookie de sessão) a última entidade resolvida (autor ou gênero) e o
+  histórico literal de turnos (teto de 20). Uma pergunta de tema livre sem nome ("o que os leitores
+  criticam?") herda a entidade do turno anterior; um botão explícito limpa o filtro.
+  **Fora de escopo, por decisão, não por esquecimento**: `history_summary` via LLM (chamada extra,
+  latência), `pending_confirmation` (não há ação arriscada dentro do chat — HITL de entrevista já é
+  página própria), loop ReAct combinando múltiplas tools numa resposta (pergunta "mista" da spec 04
+  — outra rodada), TTL/expiração de sessão (reiniciar o processo já limpa; ADR-003 já autoriza
+  estado em memória de processo único, suficiente para demo local).
+  Bug corrigido durante o desenho, antes de virar código: se a `Resposta` de uma pergunta de tema
+  livre que herdou autor salvasse `(Intencao.TEMA_LIVRE, valor)` como última entidade — em vez do
+  tipo real que produziu o filtro —, a comparação de tipo na PRÓXIMA pergunta sem nome falharia e a
+  herança quebraria na segunda rodada seguida. Corrigido guardando `entidade_herdavel` com o tipo
+  real (`AUTOR`/`GENERO`), testado com um caso de encadeamento de dois saltos.
+  Verificado ponta a ponta com `TestClient` contra o banco e o Ollama reais (não só mock): cookie
+  criado na primeira visita, segunda pergunta sem nome herdando "Agatha Christie" da primeira,
+  histórico mostrando os dois turnos no GET seguinte, e o botão de limpar removendo o filtro.
