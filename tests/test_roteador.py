@@ -187,3 +187,66 @@ def test_tema_livre_herdado_preserva_tipo_para_proximo_encadeamento(
     )
 
     assert resposta.entidade_herdavel == (Intencao.AUTOR, "Frank Herbert")
+
+
+def test_classifica_mista_sem_colidir_com_autor() -> None:
+    assert classificar("qual autor tem mais reclamação de ritmo") is Intencao.MISTA
+
+
+def test_mista_sem_dado_suficiente_vira_fora_de_escopo_com_explicacao_propria(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    """A fixture só tem 1 menção de enredo/positivo — nenhuma de ritmo/negativo."""
+    resposta = responder(con, "qual autor tem mais reclamação de ritmo")
+
+    assert resposta.intencao is Intencao.FORA_DE_ESCOPO
+    assert "menç" in resposta.texto
+    assert "aspectos" not in resposta.texto.lower()  # não é a recusa genérica de "não entendi"
+
+
+def _inserir_ritmo_negativo(con: duckdb.DuckDBPyConnection, quantas: int = 60) -> None:
+    """Menções suficientes para passar o piso da entidade — a taxa só significa algo acima dele."""
+    for review_id in range(100, 100 + quantas):
+        con.execute(
+            "INSERT INTO enrichment_sample VALUES (?, 'Dune', 2.0, TIMESTAMP '2015-01-01',"
+            " 'lento', 'texto', 'h1')",
+            [review_id],
+        )
+        con.execute(
+            "INSERT INTO review_enriched VALUES"
+            " (?, [{'aspect': 'ritmo', 'sentiment': 'negativo', 'evidence': 'arrastado'}], false)",
+            [str(review_id)],
+        )
+
+
+def test_mista_caminho_feliz_preenche_dados_e_trechos(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _inserir_ritmo_negativo(con)
+    monkeypatch.setattr(
+        roteador.buscar,
+        "buscar",
+        lambda *a, **k: [{"review_id": "2", "trecho": "arrastado", "score": 0.9}],
+    )
+
+    resposta = responder(con, "qual autor tem mais reclamação de ritmo")
+
+    assert resposta.intencao is Intencao.MISTA
+    assert resposta.dados[0]["entidade"] == "Frank Herbert"
+    assert resposta.dados[0]["n_mencoes"] == 60
+    assert resposta.dados[0]["taxa_crua"] > 0  # a taxa é o critério do ranking, tem que viajar
+    assert resposta.trechos
+    assert resposta.entidade_herdavel == (Intencao.AUTOR, "Frank Herbert")
+
+
+def test_mista_sem_trechos_ainda_responde_com_o_numero(
+    con: duckdb.DuckDBPyConnection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _inserir_ritmo_negativo(con)
+    monkeypatch.setattr(roteador.buscar, "buscar", lambda *a, **k: [])
+
+    resposta = responder(con, "qual autor tem mais reclamação de ritmo")
+
+    assert resposta.intencao is Intencao.MISTA  # não cai em FORA_DE_ESCOPO
+    assert resposta.dados
+    assert resposta.trechos == []

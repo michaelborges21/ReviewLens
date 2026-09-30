@@ -3,12 +3,13 @@
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 import duckdb
 
 from bri.data import consultas
 from bri.retrieval import buscar
+from bri.schemas.aspectos import Aspecto, Sentimento
 from bri.texto import sem_acento
 
 
@@ -17,6 +18,7 @@ class Intencao(Enum):
     GENERO = "genero"
     VISAO_GERAL = "visao_geral"
     TEMA_LIVRE = "tema_livre"
+    MISTA = "mista"
     FORA_DE_ESCOPO = "fora_de_escopo"
 
 
@@ -25,6 +27,27 @@ TERMOS = {
     Intencao.GENERO: ("genero", "categoria", "genre"),
     Intencao.VISAO_GERAL: ("quantas", "quantos", "total", "visao geral", "resumo da base"),
 }
+
+# MISTA é o caso "qual autor/gênero lidera um aspecto, e o que os leitores dizem sobre isso" —
+# ranking por SQL seguido de busca semântica filtrada pelo resultado (spec 04: loop ReAct, aqui
+# implementado como sequência fixa de 2 passos, não um planejador genérico — ver DECISIONS.md).
+INTERROGATIVOS_RANKING = ("qual", "quais", "quem")
+SUPERLATIVOS = ("mais", "menos", "maior", "menor", "melhor", "pior")
+
+# "outro" fica de fora de propósito: é a categoria residual da extração, nunca uma palavra que o
+# usuário digita para perguntar.
+ASPECTOS_TERMOS: dict[Aspecto, tuple[str, ...]] = {
+    "enredo": ("enredo", "historia", "trama"),
+    "personagens": ("personagem", "personagens"),
+    "ritmo": ("ritmo",),
+    "final": ("final",),
+    "escrita": ("escrita", "prosa", "estilo"),
+    "tradução": ("traducao",),
+    "edição_física": ("edicao fisica", "encadernacao", "impressao", "acabamento"),
+    "preço": ("preco",),
+}
+GATILHOS_SENTIMENTO_NEGATIVO = ("reclama", "reclamacao", "reclamam", "critica", "criticam", "pior")
+GATILHOS_SENTIMENTO_POSITIVO = ("elogia", "elogio", "elogiam", "melhor", "gostam", "adoram")
 
 # tema livre é sobre o que os LEITORES pensam, não a opinião do modelo (spec 05 proíbe a segunda).
 # checado só depois de TERMOS não bater — preserva 100% o comportamento de AUTOR/GENERO/VISAO_GERAL.
@@ -89,9 +112,59 @@ def _e_tema_livre(limpa: str) -> bool:
     return any(re.search(rf"\b{termo}\b", limpa) for termo in GATILHOS_TEMA_LIVRE)
 
 
+@dataclass(frozen=True)
+class _DetalhesMista:
+    tipo: Intencao  # AUTOR ou GENERO
+    aspecto: Aspecto
+    sentimento: Sentimento
+
+
+def _aspecto_da_pergunta(limpa: str) -> Aspecto | None:
+    for aspecto, termos in ASPECTOS_TERMOS.items():
+        if any(re.search(rf"\b{re.escape(t)}\b", limpa) for t in termos):
+            return aspecto
+    return None
+
+
+def _sentimento_alvo(limpa: str) -> Sentimento:
+    """Default negativo: "quem tem o pior/mais reclamado X" é o uso mais comum deste recurso."""
+    if any(re.search(rf"\b{t}\b", limpa) for t in GATILHOS_SENTIMENTO_NEGATIVO):
+        return "negativo"
+    if any(re.search(rf"\b{t}\b", limpa) for t in GATILHOS_SENTIMENTO_POSITIVO):
+        return "positivo"
+    return "negativo"
+
+
+def _detectar_mista(limpa: str) -> _DetalhesMista | None:
+    """3 condições precisam bater juntas: ranking/superlativo + categoria (autor/gênero) +
+    aspecto conhecido. Exigir as três evita MISTA engolir tráfego que já tem rota própria — só
+    "mais" ou só "autor" aparece em qualquer pergunta comum."""
+    tem_ranking = any(re.search(rf"\b{t}\b", limpa) for t in INTERROGATIVOS_RANKING) and any(
+        re.search(rf"\b{t}\b", limpa) for t in SUPERLATIVOS
+    )
+    if not tem_ranking:
+        return None
+    aspecto = _aspecto_da_pergunta(limpa)
+    if aspecto is None:
+        return None
+    if any(re.search(rf"\b{t}\b", limpa) for t in TERMOS[Intencao.AUTOR]):
+        tipo = Intencao.AUTOR
+    elif any(re.search(rf"\b{t}\b", limpa) for t in TERMOS[Intencao.GENERO]):
+        tipo = Intencao.GENERO
+    else:
+        return None
+    return _DetalhesMista(tipo, aspecto, _sentimento_alvo(limpa))
+
+
 def classificar(pergunta: str) -> Intencao:
-    """Só padrão de texto: sem LLM, sem custo e sempre com o mesmo resultado."""
+    """Só padrão de texto: sem LLM, sem custo e sempre com o mesmo resultado.
+
+    MISTA é testada antes de TERMOS: "qual autor tem mais reclamação de ritmo" bateria em
+    TERMOS[AUTOR] pelo termo "autor" e nunca chegaria a MISTA se a ordem fosse a outra.
+    """
     limpa = sem_acento(pergunta)
+    if _detectar_mista(limpa) is not None:
+        return Intencao.MISTA
     for intencao, termos in TERMOS.items():
         if any(re.search(rf"\b{termo}\b", limpa) for termo in termos):
             return intencao
@@ -258,6 +331,58 @@ def responder(
             [],
             trechos=trechos,
             entidade_herdavel=herdavel,
+        )
+
+    if intencao is Intencao.MISTA:
+        detalhes = _detectar_mista(sem_acento(pergunta))
+        assert detalhes is not None  # classificar() já garantiu a mesma condição
+        tipo_str: Literal["autor", "genero"] = (
+            "autor" if detalhes.tipo is Intencao.AUTOR else "genero"
+        )
+        ranking = consultas.ranking_por_aspecto(
+            con, tipo_str, detalhes.aspecto, detalhes.sentimento
+        )
+        if ranking is None:
+            rotulo = "autor" if detalhes.tipo is Intencao.AUTOR else "gênero"
+            return Resposta(
+                Intencao.FORA_DE_ESCOPO,
+                f"Não há avaliações suficientes analisadas por IA sobre '{detalhes.aspecto}' "
+                f"({detalhes.sentimento}) para apontar qual {rotulo} lidera com confiança — "
+                f"é preciso pelo menos {consultas.PISO_MENCOES_ASPECTO} menções do aspecto e "
+                f"{consultas.PISO_MENCOES_ENTIDADE} menções no total para a taxa significar algo.",
+                None,
+                [],
+            )
+        entidade = ranking["entidade"]
+        autor_filtro = entidade if detalhes.tipo is Intencao.AUTOR else None
+        genero_filtro = entidade if detalhes.tipo is Intencao.GENERO else None
+        trechos = buscar.buscar(con, pergunta, autor=autor_filtro, genero=genero_filtro)
+        # A taxa é o critério do ranking, então é ela que a frase precisa dizer — citar só a
+        # contagem faria a resposta parecer ordenada por volume, que é justamente o que não é.
+        texto = (
+            f"{entidade} lidera em {detalhes.aspecto} {detalhes.sentimento} na amostra analisada "
+            f"por IA: {ranking['n_mencoes']} de {ranking['mencoes_totais']} menções "
+            f"({ranking['taxa_crua']:.1f}% do que os leitores citam sobre {entidade})."
+        )
+        texto += (
+            " Veja abaixo o que os leitores dizem."
+            if trechos
+            else " Não encontrei trechos de leitores citando isso na busca semântica."
+        )
+        return Resposta(
+            intencao,
+            texto,
+            ranking["sql"],
+            [
+                {
+                    "entidade": entidade,
+                    "n_mencoes": ranking["n_mencoes"],
+                    "mencoes_totais": ranking["mencoes_totais"],
+                    "taxa_crua": round(ranking["taxa_crua"], 1),
+                }
+            ],
+            trechos=trechos,
+            entidade_herdavel=(detalhes.tipo, entidade),
         )
 
     return Resposta(

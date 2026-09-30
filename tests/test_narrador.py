@@ -288,3 +288,29 @@ def test_prompt_leva_pergunta_citacao_e_amostra(monkeypatch: pytest.MonkeyPatch)
     assert '<review id="42">ficou arrastado</review>' in prompt
     assert "3 de 80 avaliações analisadas por IA" in prompt
     assert "nota_media=4.50" in prompt
+
+
+def test_narra_resposta_mista_com_dados_e_trechos_juntos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resposta.MISTA preenche dados (ranking) e trechos (busca) na mesma resposta — o número do
+    ranking precisa passar pelo guardrail mesmo com a citação vindo de trechos, não de aspectos."""
+    resposta_mista = Resposta(
+        Intencao.MISTA,
+        "Frank Herbert lidera menções de negativo sobre ritmo na amostra (3 menções).",
+        "SELECT ...",
+        [{"entidade": "Frank Herbert", "n_mencoes": 3}],
+        trechos=[{"review_id": "2", "trecho": "arrastado", "score": 0.9}],
+    )
+    narracao = json.dumps(
+        {
+            "resposta": "Frank Herbert tem 3 menções de ritmo negativo na amostra.",
+            "citacoes": [{"review_id": "2", "trecho": "arrastado"}],
+            "confianca": "média",
+            "proximas_perguntas": [],
+        }
+    )
+    monkeypatch.setattr(narrador.ollama, "gerar_json", lambda *a, **k: narracao)
+
+    narrada = narrador.narrar("qual autor tem mais reclamação de ritmo?", resposta_mista)
+
+    assert narrada is not None
+    assert narrada.citacoes[0].review_id == "2"
