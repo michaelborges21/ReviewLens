@@ -84,6 +84,31 @@ def performance_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str
     }
 
 
+def todos_os_generos(con: duckdb.DuckDBPyConnection) -> list[str]:
+    """Nomes de gênero, ordem alfabética — alimenta a sugestão de digitação em /reviews.
+
+    São 10.883 categorias distintas: grande demais para um <select>, mas cabem numa <datalist>
+    (sugestão nativa do navegador, sem JavaScript novo) porque o usuário filtra digitando.
+    """
+    linhas = _linhas(con, "SELECT categoria FROM genre_stats ORDER BY categoria")
+    return [str(linha["categoria"]) for linha in linhas]
+
+
+def generos_elegiveis_para_nuvem(con: duckdb.DuckDBPyConnection, piso: int = 200) -> list[str]:
+    """Gêneros com avaliação suficiente para uma nuvem de palavras ter sentido.
+
+    Abaixo do piso, poucas avaliações não produzem frequência de palavra que signifique nada —
+    e cabem numa lista de tamanho razoável para <select> comum (264 nomes, contra 10.883 no
+    catálogo inteiro), sem precisar do truque de <datalist> que /reviews usa.
+    """
+    linhas = _linhas(
+        con,
+        "SELECT categoria FROM genre_stats WHERE n_reviews >= ? ORDER BY categoria",
+        [piso],
+    )
+    return [str(linha["categoria"]) for linha in linhas]
+
+
 def ranking_de_generos(
     con: duckdb.DuckDBPyConnection, limite: int = LIMITE_PADRAO
 ) -> list[dict[str, Any]]:

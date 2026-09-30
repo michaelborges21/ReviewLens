@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set ativo = 'nuvem' %}
+{% block titulo %}Nuvem de palavras — ReviewLens{% endblock %}
+
+{% block conteudo %}
+<h2>Nuvem de palavras por gênero</h2>
+<p class="legenda">
+  As palavras mais frequentes numa amostra das avaliações do gênero escolhido — termos comuns do
+  inglês (the, and, is...) já são removidos. Só gêneros com avaliação suficiente aparecem na
+  lista, senão a nuvem sai vazia de sentido.
+</p>
+
+<form class="filtros" method="get" action="/nuvem"
+      hx-get="/nuvem" hx-target="#nuvem-resultado" hx-swap="innerHTML">
+  <div>
+    <label for="categoria">Gênero</label>
+    <select name="categoria" id="categoria">
+      <option value="">selecione...</option>
+      {% for g in generos %}
+      <option value="{{ g }}" {{ 'selected' if categoria == g }}>{{ g }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Gerar</button>
+</form>
+
+<div id="nuvem-resultado">
+  {% include "_nuvem_imagem.html" %}
+</div>
+{% endblock %}

@@ -222,6 +222,38 @@ def _candidatos(pergunta: str) -> list[str]:
     return sorted(uteis, key=len, reverse=True)
 
 
+def _entidade_pelo_nome_inteiro(
+    con: duckdb.DuckDBPyConnection, pergunta: str
+) -> tuple[Intencao, str] | None:
+    """Casa a pergunta INTEIRA contra o catálogo — nunca fragmentos soltos dela.
+
+    `resolver_entidade` quebra a frase em palavras e testa cada uma, o que é certo quando a
+    pergunta tem estrutura ("desempenho do autor Herbert"). Aqui seria desastre: "me indica um
+    livro bom" casaria "indica" dentro de "Regional Education Indicators Project" e a recusa que
+    a spec 05 exige viraria uma resposta sobre um autor aleatório. Medido ao introduzir isto.
+    """
+    limpa = pergunta.strip().strip("?!.,")
+    if not limpa:
+        return None
+    catalogos = (
+        (Intencao.AUTOR, "author_stats", "author"),
+        (Intencao.GENERO, "genre_stats", "categoria"),
+    )
+    # Duas passadas: nome exato em qualquer catálogo vence nome parcial em qualquer outro. Sem
+    # isso, "Fiction" (gênero exato, 3.475 avaliações) perdia para o autor "New England Science
+    # Fiction Association", que casava por conter a palavra.
+    for comparacao in ("lower({coluna}) = lower(?)", "lower({coluna}) LIKE '%' || lower(?) || '%'"):
+        for tipo, tabela, coluna in catalogos:
+            achado = con.execute(
+                f"SELECT {coluna} FROM {tabela} WHERE {comparacao.format(coluna=coluna)}"
+                f" ORDER BY n_reviews DESC LIMIT 1",
+                [limpa],
+            ).fetchone()
+            if achado:
+                return tipo, str(achado[0])
+    return None
+
+
 def _entidade_ou_herdada(
     entidade: str | None, tipo: Intencao, entidade_herdada: tuple[Intencao, str] | None
 ) -> str | None:
@@ -385,12 +417,20 @@ def responder(
             entidade_herdavel=(detalhes.tipo, entidade),
         )
 
+    # Último recurso antes de recusar: a pergunta inteira pode ser só o nome de uma entidade.
+    # Digitar "Agatha Christie" é o jeito mais natural de perguntar por um autor, e exigir a
+    # palavra "autor" na frase fazia o chat recusar exatamente a pergunta mais óbvia.
+    tipo_e_nome = _entidade_pelo_nome_inteiro(con, pergunta)
+    if tipo_e_nome is not None:
+        tipo, nome = tipo_e_nome
+        return responder(con, f"desempenho do {tipo.value} {nome}", entidade_herdada)
+
     return Resposta(
         Intencao.FORA_DE_ESCOPO,
         "Não consigo responder isso ainda. Hoje respondo sobre desempenho de um autor, "
         "distribuição de notas de um gênero, o que os leitores citam sobre eles "
         "(aspectos extraídos por IA de uma amostra), busca por tema livre nas avaliações "
-        "e números gerais da base.",
+        "e números gerais da base. Você também pode digitar só o nome de um autor ou gênero.",
         None,
         [],
     )

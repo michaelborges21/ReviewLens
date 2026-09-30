@@ -102,7 +102,16 @@ def resetar_estado_conversa() -> None:
 
 @pytest.mark.parametrize(
     "caminho",
-    ["/", "/autores", "/generos", "/reviews", "/entrevistas", "/chat", "/autores/Frank%20Herbert"],
+    [
+        "/",
+        "/autores",
+        "/generos",
+        "/reviews",
+        "/nuvem",
+        "/entrevistas",
+        "/chat",
+        "/autores/Frank%20Herbert",
+    ],
 )
 def test_paginas_respondem(cliente: TestClient, caminho: str) -> None:
     assert cliente.get(caminho).status_code == 200
@@ -170,7 +179,7 @@ def test_pagina_de_autor_sem_resumo_nao_quebra(cliente: TestClient) -> None:
     assert "redigido por IA local" not in resposta.text
 
 
-def test_chat_responde_e_mostra_sql(cliente: TestClient) -> None:
+def test_chat_responde_com_o_nome_resolvido(cliente: TestClient) -> None:
     resposta = cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
 
     assert resposta.status_code == 200
@@ -212,6 +221,48 @@ def test_chat_sem_modelo_responde_com_texto_deterministico(
 
     assert resposta.status_code == 200
     assert "Frank Herbert" in resposta.text
+
+
+def test_chat_pergunta_de_autor_mostra_grafico(cliente: TestClient) -> None:
+    resposta = cliente.post("/chat", data={"pergunta": "desempenho do autor Herbert"})
+
+    assert "<img" in resposta.text
+    assert "data:image/png;base64," in resposta.text
+
+
+def test_chat_pergunta_de_genero_mostra_grafico(cliente: TestClient) -> None:
+    resposta = cliente.post("/chat", data={"pergunta": "distribuição de notas do gênero Ficção"})
+
+    assert "<img" in resposta.text
+
+
+def test_chat_pergunta_fora_de_escopo_nao_mostra_grafico(cliente: TestClient) -> None:
+    resposta = cliente.post("/chat", data={"pergunta": "me indica um livro bom"})
+
+    assert "<img" not in resposta.text
+
+
+def test_nuvem_com_categoria_mostra_imagem(cliente: TestClient) -> None:
+    resposta = cliente.get("/nuvem", params={"categoria": "Ficção"})
+
+    assert resposta.status_code == 200
+    assert "<img" in resposta.text
+    assert "data:image/png;base64," in resposta.text
+
+
+def test_nuvem_sem_avaliacao_mostra_mensagem_sem_quebrar(cliente: TestClient) -> None:
+    resposta = cliente.get("/nuvem", params={"categoria": "Categoria Sem Review Nenhuma"})
+
+    assert resposta.status_code == 200
+    assert "<img" not in resposta.text
+    assert "Sem avaliações suficientes" in resposta.text
+
+
+def test_nuvem_sem_categoria_pede_selecao(cliente: TestClient) -> None:
+    resposta = cliente.get("/nuvem")
+
+    assert resposta.status_code == 200
+    assert "Escolha um gênero" in resposta.text
 
 
 def test_chat_recusa_fora_de_escopo(cliente: TestClient) -> None:
@@ -318,7 +369,7 @@ def test_aprovar_exporta_o_candidato(
     resposta = cliente.post("/entrevistas/aprovar", data={"prefixo": "h1abcdef0123"})
 
     assert resposta.status_code == 200
-    assert "exportado" in resposta.text.lower()
+    assert "selecionado" in resposta.text.lower()
     arquivos = list(tmp_path.glob("candidatos_entrevista_*.csv"))
     assert len(arquivos) == 1
     assert "h1abcdef012345" in arquivos[0].read_text(encoding="utf-8")

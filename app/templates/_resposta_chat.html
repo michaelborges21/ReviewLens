@@ -27,6 +27,12 @@
 <p{% if resposta.intencao.value == 'fora_de_escopo' %} class="recusa"{% endif %}>{{ resposta.texto }}</p>
 {% endif %}
 
+{% if grafico %}
+<img src="{{ grafico }}"
+     alt="{{ 'Gráfico de nota e volume de avaliações por ano' if resposta.intencao.value == 'autor' else 'Gráfico de distribuição de notas' }}"
+     style="max-width:100%">
+{% endif %}
+
 {% if resposta.dados %}
 <table>
   <thead>
@@ -38,10 +44,5 @@
   {% endfor %}
   </tbody>
 </table>
-{% endif %}
-
-{% if resposta.sql %}
-<p class="legenda" style="margin-top:14px">Consulta executada:</p>
-<div class="sql">{{ resposta.sql }}</div>
 {% endif %}
 {% endif %}

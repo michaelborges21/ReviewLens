@@ -1,0 +1,7 @@
+{% if imagem %}
+<img src="{{ imagem }}" alt="Nuvem de palavras do gênero {{ categoria }}" style="max-width:100%">
+{% elif mensagem %}
+<p class="legenda">{{ mensagem }}</p>
+{% else %}
+<p class="legenda">Escolha um gênero acima para gerar a nuvem.</p>
+{% endif %}

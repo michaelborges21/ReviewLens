@@ -5,25 +5,53 @@
 {% block conteudo %}
 <h2>Candidatos a entrevista</h2>
 <p class="legenda">
-  Ranking explicável: as parcelas aparecem na tabela, não só a nota final. Leitores aparecem
-  sempre pseudonimizados.
+  Esta tela responde a uma pergunta: <b>com quais leitores vale a pena conversar?</b> A editora
+  pode querer ouvir gente que avalia livros com regularidade e escreve com profundidade — para
+  entender o que os números não explicam. A lista abaixo sugere quem são essas pessoas, mas
+  <b>nada é enviado a ninguém</b>: a decisão de contatar continua sendo de uma pessoa.
 </p>
 
+<div class="resumo">
+  <p class="resumo-headline">Como ler esta tabela</p>
+  <p style="margin:0 0 10px">
+    Os leitores aparecem por um código, nunca por nome — a base não guarda nome nenhum. Cada
+    coluna é uma parcela do critério, mostrada separadamente para você discordar do ranking se
+    quiser:
+  </p>
+  <ul style="margin:0 0 12px">
+    <li><b>Avaliações</b> — quantas resenhas essa pessoa escreveu. Quem avalia mais tem mais
+      repertório para uma conversa.</li>
+    <li><b>Nota média</b> — a média das notas que ela dá aos livros.</li>
+    <li><b>Tamanho mediano</b> — quantos caracteres tem a resenha típica dela. É o indicador de
+      profundidade: quem escreve mais, argumenta mais.</li>
+    <li><b>Distância do meio</b> — o quanto a nota média dela se afasta de 3 estrelas.
+      <b>Quanto menor, melhor</b>, e o motivo é contraintuitivo: a análise mostrou que quem dá
+      cinco estrelas escreve menos que todo mundo. Quem argumenta de verdade é o público do meio
+      da escala, que viu virtudes e defeitos no mesmo livro.</li>
+  </ul>
+  <p style="margin:0">
+    <b>O botão "Aprovar"</b> registra que essa pessoa foi selecionada para contato e grava uma
+    linha num arquivo em <code>reports/exports/</code>, com o código completo do leitor e a
+    justificativa. É só isso: nenhuma mensagem é disparada, nenhum dado sai desta máquina. O
+    passo seguinte — procurar a pessoa de fato — é humano e acontece fora do sistema.
+  </p>
+</div>
+
 <div class="pendente">
-  <strong>Score provisório.</strong> Sem os aspectos da F1, profundidade é aproximada pelo
-  tamanho do texto. A hipótese H2 mostrou que quem dá cinco estrelas escreve menos, então o
-  score penaliza nota extrema — leitores do meio da escala argumentam mais.
+  <strong>Por que "score provisório".</strong> O ideal seria medir profundidade pelos aspectos
+  que a IA extrai de cada resenha. Como essa extração cobre uma amostra, e não toda a base, aqui
+  a profundidade é aproximada pelo tamanho do texto — funciona bem, mas é aproximação.
 </div>
 
 <table>
   <thead>
     <tr>
-      <th>Leitor (pseudônimo)</th>
+      <th>Leitor (código)</th>
       <th class="num">Avaliações</th>
       <th class="num">Nota média</th>
       <th class="num">Tamanho mediano</th>
       <th class="num">Distância do meio</th>
-      <th>Aprovar</th>
+      <th>Selecionar</th>
     </tr>
   </thead>
   <tbody>

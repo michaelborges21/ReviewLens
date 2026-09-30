@@ -17,6 +17,7 @@ dependencies = [
     "pydantic>=2.9",
     "python-multipart>=0.0.12",
     "uvicorn[standard]>=0.32",
+    "wordcloud>=1.9",
 ]
 
 [dependency-groups]
@@ -51,6 +52,12 @@ known-first-party = ["bri", "app"]
 [tool.mypy]
 strict = true
 files = ["src"]
+
+# wordcloud não publica stubs de tipo (ADR: nuvem de palavras por gênero, 2026-09-30). Escopado
+# só a essa biblioteca — o resto do projeto continua sob --strict sem exceção.
+[[tool.mypy.overrides]]
+module = "wordcloud"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

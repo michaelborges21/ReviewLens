@@ -189,6 +189,34 @@ def test_tema_livre_herdado_preserva_tipo_para_proximo_encadeamento(
     assert resposta.entidade_herdavel == (Intencao.AUTOR, "Frank Herbert")
 
 
+def test_so_o_nome_do_autor_ja_responde(con: duckdb.DuckDBPyConnection) -> None:
+    """Digitar só o nome é o jeito mais natural de perguntar, e era recusado."""
+    resposta = responder(con, "Frank Herbert")
+
+    assert resposta.intencao is Intencao.AUTOR
+    assert "Frank Herbert" in resposta.texto
+
+
+def test_so_o_nome_do_genero_ja_responde(con: duckdb.DuckDBPyConnection) -> None:
+    """Nome exato de gênero vence nome parcial de autor: 'Fiction' caía num autor que continha
+    a palavra, em vez do gênero homônimo."""
+    resposta = responder(con, "Ficção")
+
+    assert resposta.intencao is Intencao.GENERO
+
+
+def test_frase_fora_de_escopo_nao_vira_autor_por_fragmento(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    """Regressão: casar fragmentos soltos fazia 'me indica um livro bom' achar o autor
+    'Regional Education Indicators Project' e a recusa da spec 05 sumia."""
+    con.execute("INSERT INTO author_stats VALUES ('Education Indicators Project', 1, 5, 4.0, 3.9)")
+
+    resposta = responder(con, "me indica um livro bom")
+
+    assert resposta.intencao is Intencao.FORA_DE_ESCOPO
+
+
 def test_classifica_mista_sem_colidir_com_autor() -> None:
     assert classificar("qual autor tem mais reclamação de ritmo") is Intencao.MISTA
 

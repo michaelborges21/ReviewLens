@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse
 
 from app.base import e_htmx, obter_conexao, templates
 from bri.agent import conversa, exportar, narrador, roteador
-from bri.data import consultas
+from bri.agent.roteador import Intencao
+from bri.data import consultas, graficos, nuvem
 
 router = APIRouter()
 
@@ -105,7 +106,27 @@ def reviews(
     }
     if e_htmx(request):
         return _pagina(request, "_tabela_reviews.html", contexto)
+    # A <datalist> mora em reviews.html, fora do bloco que o HTMX troca — não precisa
+    # recarregar os 10.883 gêneros a cada filtro, só na primeira carga da página.
+    contexto["generos"] = consultas.todos_os_generos(con)
     return _pagina(request, "reviews.html", contexto)
+
+
+@router.get("/nuvem", response_class=HTMLResponse)
+def nuvem_de_palavras(request: Request, con: Conexao, categoria: str | None = None) -> HTMLResponse:
+    imagem = None
+    mensagem = None
+    if categoria:
+        frequencias = nuvem.frequencia_de_palavras(con, categoria)
+        imagem = nuvem.gerar_nuvem(frequencias)
+        if imagem is None:
+            mensagem = f"Sem avaliações suficientes para gerar uma nuvem de '{categoria}'."
+
+    contexto: dict[str, Any] = {"categoria": categoria, "imagem": imagem, "mensagem": mensagem}
+    if e_htmx(request):
+        return _pagina(request, "_nuvem_imagem.html", contexto)
+    contexto["generos"] = consultas.generos_elegiveis_para_nuvem(con)
+    return _pagina(request, "nuvem.html", contexto)
 
 
 @router.get("/entrevistas", response_class=HTMLResponse)
@@ -145,6 +166,16 @@ def chat(request: Request) -> HTMLResponse:
     return _com_cookie(_pagina(request, "chat.html", contexto), sessao_id, request)
 
 
+def _grafico_da_resposta(resposta: roteador.Resposta) -> str | None:
+    """Só AUTOR e GENERO têm dado com forma de série — mista e visão geral são uma linha só,
+    agregada, e forçar gráfico ali seria inventar visualização sem conteúdo real."""
+    if resposta.intencao is Intencao.AUTOR:
+        return graficos.grafico_autor(resposta.dados)
+    if resposta.intencao is Intencao.GENERO:
+        return graficos.grafico_genero(resposta.dados)
+    return None
+
+
 @router.post("/chat", response_class=HTMLResponse)
 def perguntar(request: Request, con: Conexao, pergunta: Annotated[str, Form()]) -> HTMLResponse:
     sessao_id = _sessao_id(request)  # cobre POST direto sem GET prévio (bookmark, teste)
@@ -164,6 +195,7 @@ def perguntar(request: Request, con: Conexao, pergunta: Annotated[str, Form()]) 
         "pergunta": pergunta,
         "turnos": conversa.obter(sessao_id).turnos,
         "entidade_herdada": conversa.obter(sessao_id).ultima_entidade,
+        "grafico": _grafico_da_resposta(resposta),
     }
     pagina = "_resposta_chat.html" if e_htmx(request) else "chat.html"
     return _com_cookie(_pagina(request, pagina, contexto), sessao_id, request)

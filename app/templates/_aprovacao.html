@@ -1,11 +1,13 @@
 {% if candidato %}
 <span class="recusa">
-  Aprovado e exportado: <code>{{ prefixo }}…</code> — linha gravada em
-  <code>reports/exports/</code>.
+  <b>Selecionado.</b> O leitor <code>{{ prefixo }}…</code> entrou na lista de contatos, gravada em
+  <code>reports/exports/</code>. Nenhuma mensagem foi enviada — procurar a pessoa é o próximo
+  passo, e é humano.
 </span>
 {% else %}
 <span class="recusa">
-  Não encontrado: <code>{{ prefixo }}…</code> não corresponde mais a um candidato elegível.
-  Nada foi exportado.
+  <b>Não encontrado.</b> O leitor <code>{{ prefixo }}…</code> não está mais entre os candidatos
+  elegíveis — os dados podem ter mudado desde que a página abriu. Nada foi gravado; recarregue a
+  tela para ver a lista atual.
 </span>
 {% endif %}

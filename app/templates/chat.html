@@ -5,10 +5,42 @@
 {% block conteudo %}
 <h2>Perguntar</h2>
 <p class="legenda">
-  Números e citações vêm de consulta SQL; o texto é redigido por um modelo local, sem custo por
-  token e sem enviar dado para fora desta máquina. Toda resposta mostra a consulta que a produziu,
-  e cada afirmação sobre leitores cita o review_id de onde saiu.
+  Esta tela substitui a leitura manual de avaliações. Em vez de abrir a planilha e procurar
+  padrão por conta própria, digite a pergunta em português e receba uma resposta com os números
+  reais por trás e a citação exata de onde cada afirmação saiu — nunca uma opinião inventada.
 </p>
+
+<div class="resumo">
+  <p class="resumo-headline">O que você pode perguntar</p>
+  <div class="resumo-colunas">
+    <div>
+      <p class="resumo-rotulo">Sobre um autor ou gênero</p>
+      <ul>
+        <li>"Robert Jordan" — o nome sozinho já funciona</li>
+        <li>"desempenho do autor Tolkien"</li>
+        <li>"distribuição de notas do gênero Fiction"</li>
+      </ul>
+    </div>
+    <div>
+      <p class="resumo-rotulo">Sobre o que os leitores dizem</p>
+      <ul>
+        <li>"o que os leitores criticam sobre finais decepcionantes?"</li>
+        <li>"leitores reclamam de tradução ruim?"</li>
+      </ul>
+    </div>
+    <div>
+      <p class="resumo-rotulo">Cruzando as duas coisas</p>
+      <ul>
+        <li>"qual autor tem mais reclamação de ritmo, e o que dizem sobre isso?"</li>
+        <li>"qual gênero tem mais reclamação de preço?"</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin:10px 0 0">
+    Uma pergunta feita depois de outra lembra do assunto — perguntar "Tolkien" e, na sequência,
+    "o que criticam?" já entende que é sobre ele, sem precisar repetir o nome.
+  </p>
+</div>
 
 <div class="chat-caixa">
   {% if entidade_herdada %}

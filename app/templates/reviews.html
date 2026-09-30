@@ -27,7 +27,11 @@
   </div>
   <div>
     <label for="genero_nome">Gênero</label>
-    <input type="text" name="genero_nome" id="genero_nome" value="{{ filtros.genero_nome or '' }}" placeholder="ex.: Fiction">
+    <input type="text" name="genero_nome" id="genero_nome" list="generos-lista"
+           value="{{ filtros.genero_nome or '' }}" placeholder="comece a digitar...">
+    <datalist id="generos-lista">
+      {% for g in generos %}<option value="{{ g }}">{% endfor %}
+    </datalist>
   </div>
   <button type="submit">Filtrar</button>
 </form>
