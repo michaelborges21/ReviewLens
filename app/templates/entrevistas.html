@@ -29,7 +29,7 @@
   <tbody>
   {% for candidato in candidatos %}
     <tr>
-      <td><code>{{ candidato.user_hash[:12] }}…</code></td>
+      <td><code>{{ candidato.prefixo }}…</code></td>
       <td class="num">{{ candidato.n_reviews }}</td>
       <td class="num">{{ "%.2f"|format(candidato.nota_media) }}</td>
       <td class="num">{{ candidato.comprimento_mediano | int }}</td>
@@ -38,7 +38,7 @@
         <form method="post" action="/entrevistas/aprovar"
               hx-post="/entrevistas/aprovar" hx-swap="outerHTML">
           {# Só o prefixo: o pseudônimo inteiro no DOM anularia o truncamento da tela. #}
-          <input type="hidden" name="prefixo" value="{{ candidato.user_hash[:12] }}">
+          <input type="hidden" name="prefixo" value="{{ candidato.prefixo }}">
           <button class="discreto" type="submit">Aprovar</button>
         </form>
       </td>

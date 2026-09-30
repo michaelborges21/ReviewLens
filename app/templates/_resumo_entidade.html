@@ -1,0 +1,30 @@
+{% if resumo %}
+<div class="resumo">
+  <p class="resumo-headline">{{ resumo.headline }}</p>
+  <div class="resumo-colunas">
+    {% if resumo.strengths %}
+    <div>
+      <p class="resumo-rotulo">Pontos fortes</p>
+      <ul>{% for ponto in resumo.strengths %}<li>{{ ponto }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if resumo.weaknesses %}
+    <div>
+      <p class="resumo-rotulo">Pontos fracos</p>
+      <ul>{% for ponto in resumo.weaknesses %}<li>{{ ponto }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+  </div>
+  {% for citacao in resumo.notable_quotes %}
+  <div class="review">
+    <div class="meta">review {{ citacao.review_id }}</div>
+    <div class="texto">{{ citacao.quote }}</div>
+  </div>
+  {% endfor %}
+  <p class="legenda">
+    Resumo redigido por IA local a partir de
+    {{ "{:,}".format(resumo.n_reviews_considered).replace(",", ".") }} avaliações analisadas.
+    Cada trecho citado é cópia literal da avaliação de origem, conferida contra o texto original.
+  </p>
+</div>
+{% endif %}

@@ -68,6 +68,17 @@ def cliente() -> Iterator[TestClient]:
         [SCRIPT],
     )
 
+    con.execute(
+        """
+        CREATE TABLE entity_summaries AS SELECT * FROM (VALUES
+            ('Ritmo domina as críticas.', ['Enredo elogiado'], ['Ritmo lento'],
+             [{'review_id': '1', 'quote': ?}], 'autor', 'Frank Herbert', 7, '0.2.1')
+        ) t(headline, strengths, weaknesses, notable_quotes, entity_type, entity_id,
+            n_reviews_considered, prompt_version)
+        """,
+        [SCRIPT],
+    )
+
     app.dependency_overrides[obter_conexao] = lambda: con
     yield TestClient(app)
     app.dependency_overrides.clear()
@@ -134,6 +145,29 @@ def test_evidencia_de_aspecto_e_escapada(cliente: TestClient) -> None:
 
     assert SCRIPT not in corpo
     assert "&lt;script&gt;" in corpo
+
+
+def test_pagina_de_autor_mostra_resumo_quando_existe(cliente: TestClient) -> None:
+    corpo = cliente.get("/autores/Frank%20Herbert").text
+
+    assert "Ritmo domina as críticas." in corpo
+    assert "redigido por IA local" in corpo
+
+
+def test_quote_do_resumo_e_escapada(cliente: TestClient) -> None:
+    """A parcial nova reintroduz texto de terceiro na tela — o escape tem que valer aqui também."""
+    corpo = cliente.get("/autores/Frank%20Herbert").text
+
+    assert SCRIPT not in corpo
+    assert "&lt;script&gt;" in corpo
+
+
+def test_pagina_de_autor_sem_resumo_nao_quebra(cliente: TestClient) -> None:
+    """Entidade abaixo do piso simplesmente não mostra o bloco — não é página vazia nem erro."""
+    resposta = cliente.get("/autores/Autor%20Inexistente")
+
+    assert resposta.status_code == 200
+    assert "redigido por IA local" not in resposta.text
 
 
 def test_chat_responde_e_mostra_sql(cliente: TestClient) -> None:
@@ -238,6 +272,14 @@ def test_chat_limpar_filtro_remove_entidade_herdada(cliente: TestClient) -> None
     assert "filtro herdado" not in cliente.get("/chat").text.lower()
 
 
+def test_api_autores_com_ordenacao_invalida_devolve_400(cliente: TestClient) -> None:
+    """Regressão: o ValueError da allowlist escapava da rota e virava 500 (erro do servidor)."""
+    resposta = cliente.get("/api/autores", params={"ordenar_por": "'; DROP TABLE reviews; --"})
+
+    assert resposta.status_code == 400
+    assert "ordenação desconhecida" in resposta.json()["detail"]
+
+
 def test_api_devolve_json(cliente: TestClient) -> None:
     dados = cliente.get("/api/autores").json()
 
@@ -251,6 +293,21 @@ def test_entrevistas_mostra_pseudonimo_truncado(cliente: TestClient) -> None:
 
     assert "h1abcdef0123" in corpo
     assert "h1abcdef012345" not in corpo
+
+
+def test_api_entrevistas_nao_vaza_hash_completo(cliente: TestClient) -> None:
+    """Regressão: a API devolvia o user_hash inteiro, contornando o gate de PII que a tela aplica.
+
+    A spec 04 exige confirmação humana para revelar o identificador — revelar em JSON sem gate
+    nenhum é o mesmo vazamento, por outra porta.
+    """
+    linhas = cliente.get("/api/entrevistas").json()
+
+    assert linhas
+    corpo = str(linhas)
+    assert "h1abcdef0123" in corpo
+    assert "h1abcdef012345" not in corpo
+    assert all("user_hash" not in linha for linha in linhas)
 
 
 def test_aprovar_exporta_o_candidato(

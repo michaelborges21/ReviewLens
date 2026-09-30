@@ -59,6 +59,7 @@ def autor(request: Request, con: Conexao, autor: str) -> HTMLResponse:
         {
             "dados": consultas.performance_do_autor(con, autor),
             "aspectos": consultas.aspectos_do_autor(con, autor),
+            "resumo": consultas.resumo_da_entidade(con, "autor", autor),
         },
     )
 
@@ -76,6 +77,7 @@ def genero(request: Request, con: Conexao, categoria: str) -> HTMLResponse:
         {
             "dados": consultas.performance_do_genero(con, categoria),
             "aspectos": consultas.aspectos_do_genero(con, categoria),
+            "resumo": consultas.resumo_da_entidade(con, "genero", categoria),
         },
     )
 

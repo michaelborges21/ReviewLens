@@ -96,6 +96,20 @@ button.discreto { background: #fff; color: var(--destaque); }
 .recusa { color: #6b4a22; }
 .confianca { color: var(--destaque); font-weight: 600; }
 
+.resumo {
+  background: #fff;
+  border: 1px solid var(--borda);
+  border-left: 3px solid var(--destaque);
+  border-radius: 6px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+.resumo-headline { font-size: 17px; font-weight: 600; margin: 0 0 12px; }
+.resumo-colunas { display: flex; gap: 32px; flex-wrap: wrap; }
+.resumo-colunas > div { flex: 1; min-width: 260px; }
+.resumo-rotulo { color: var(--suave); font-size: 13px; font-weight: 600; margin: 0; }
+.resumo ul { margin: 6px 0 12px; padding-left: 20px; }
+
 .filtro-herdado {
   background: var(--fundo);
   border: 1px solid var(--borda);

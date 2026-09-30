@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 
 import duckdb
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.base import obter_conexao
 from bri.data import consultas
@@ -20,7 +20,15 @@ def numeros(con: Conexao) -> dict[str, Any]:
 
 @router.get("/autores")
 def autores(con: Conexao, ordenar_por: str = Query("bayesiana")) -> list[dict[str, Any]]:
-    return consultas.ranking_de_autores(con, ordenar_por)
+    """Ordenação fora da allowlist é erro do cliente, não do servidor: 400, não 500.
+
+    A tela HTML cai em silêncio para o padrão; aqui o cliente é um programa e precisa saber que
+    mandou um valor inválido, em vez de receber uma lista ordenada por outro critério.
+    """
+    try:
+        return consultas.ranking_de_autores(con, ordenar_por)
+    except ValueError as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
 
 
 @router.get("/autores/{autor}")
