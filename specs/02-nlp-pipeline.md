@@ -6,11 +6,24 @@ Status: em implementação (v0.1) — etapa 3 (aspectos) concluída em 19.947 re
 Tudo que pode ser **pré-computado** é pré-computado. O agente consulta resultados, não reprocessa 1M+ reviews em tempo de pergunta. Isso corta custo e latência e torna as respostas auditáveis.
 
 ## Etapas
-1. **Idioma** — filtrar/rotular; escopo inicial: inglês (ou o idioma dominante).
-2. **Sentimento** — modelo encoder (ex.: RoBERTa de sentimento) em toda a base. Comparar com a nota → H5.
-3. **Aspectos (ABSA)** — LLM com saída estruturada na amostra; opcionalmente destilado para modelo pequeno (ver 07) para cobrir a base toda.
-4. **Tópicos** — BERTopic sobre embeddings; rótulos de tópicos gerados por LLM e revisados por humano.
-5. **Sumarização hierárquica (map-reduce)** — review → livro → autor → gênero. Cada nível cita os ids do nível abaixo.
+1. **Idioma** — filtrar/rotular; escopo inicial: inglês (ou o idioma dominante). Fora desta fase
+   por decisão registrada.
+2. ~~**Sentimento** — modelo encoder em toda a base~~ → **não será construído (ADR-015).** O
+   sentimento **por aspecto** que a etapa 3 produz responde H5 sem inferência sobre 2,24M textos:
+   2,5% das avaliações de nota alta têm texto majoritariamente negativo, 3,5% das de nota baixa
+   têm texto positivo (`consultas.divergencia_nota_sentimento`). Não existe, e não passará a
+   existir, sentimento de review inteira — neste projeto "sentimento" é sempre por aspecto.
+3. **Aspectos (ABSA)** — LLM com saída estruturada na amostra. **Concluída**: 19.947 avaliações,
+   45.847 aspectos, 97,0% de citação literal verificada.
+4. **Tópicos** — **k-means sobre os embeddings já existentes, não BERTopic (ADR-016)**; rótulos
+   gerados por LLM e revisados por humano. k=20 escolhido por medição. A silhueta medida é ~0,02
+   em todo k de 8 a 60: a saída é **tema exploratório**, não "o tópico da review".
+5. **Sumarização por entidade** — autor e gênero, com piso de 20 avaliações analisadas. **Não é a
+   cascata map-reduce literal** (review → livro → autor → gênero) que esta spec desenhava: a
+   agregação de aspectos em SQL já é o passo "map" e é pré-computada, e não há problema de janela
+   de contexto a resolver (9 aspectos + 12 citações cabem muitas vezes), então o "reduce" é uma
+   chamada por entidade. Cada resumo cita `review_id` reais, validados contra os ids enviados.
+   Livros ficam fora do primeiro passe.
 
 ## Schema de aspectos (exemplo)
 ```json
@@ -46,4 +59,10 @@ Tudo que pode ser **pré-computado** é pré-computado. O agente consulta result
   `think: false`. Sem eles: 33% de enum correto e 50,4s por review, contra 100% e 4,3s com eles.
 
 ## Saídas
-`review_enriched` (sentimento, aspectos, tópico), `entity_summaries`, `topics`.
+- `review_enriched` — `review_id`, `aspects` (lista de aspecto+sentimento+evidência literal),
+  `is_recommendation`. **Sem coluna de sentimento de review inteira** (ADR-015) e **sem coluna de
+  tópico**: o tópico vive em `chunk_topics`, na granularidade de chunk, que é a granularidade em
+  que o embedding existe.
+- `entity_summaries` — um resumo por par (tipo, entidade), com citações verificadas.
+- `topics` + `chunk_topics` — os 20 temas e a ligação chunk↔tema. Separadas de `review_chunks`
+  porque `make index` recria aquela tabela com `CREATE OR REPLACE`.

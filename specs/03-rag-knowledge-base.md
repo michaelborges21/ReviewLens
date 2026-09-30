@@ -4,6 +4,14 @@ Status: implementado (v0.2) para KB-Reviews, a única base desta rodada — `mak
 KB-Books, KB-Summaries e KB-Glossário seguem fora de escopo. Decisões de implementação registradas
 abaixo, sob "Notas de implementação".
 
+## Consumidores de `review_chunks`
+
+Além da busca híbrida, `chunk_topics` (spec 02, etapa 4) depende dos mesmos embeddings.
+**`make index` recria `review_chunks` com `CREATE OR REPLACE`**, então reindexar invalida a
+ligação chunk↔tópico: rodar `make topicos` e `make topicos-carregar` depois. Foi por isso que o
+tópico virou tabela de ligação em vez de coluna — assim a quebra aparece como ligação órfã, não
+como coluna que sumiu em silêncio.
+
 ## Quando usar RAG (e quando NÃO)
 - **RAG serve para**: "o que os leitores dizem sobre X", exemplos, citações, nuances.
 - **RAG NÃO serve para agregação** ("nota média do autor X", "quantas reviews em 2010"). Isso é SQL (ver 04). Top-k de trechos não conta nada com precisão.

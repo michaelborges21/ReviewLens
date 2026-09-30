@@ -9,7 +9,7 @@ reviews da camada `processed`. Figuras em `reports/figuras/`.
 | H2 — reviews longas são as mais informativas | ✅ confirmada, com inversão importante |
 | H3 — gêneros diferem nos aspectos citados | ⏳ pendente de F1 |
 | H4 — polarização por livro/autor | ⚠️ existe, mas é minoria |
-| H5 — divergência entre nota e sentimento | ⏳ pendente de F1 |
+| H5 — divergência entre nota e sentimento | ⚠️ existe, mas é minoria |
 | H6 — minoria de usuários concentra as avaliações | ✅ confirmada |
 | H7 — existe tendência temporal | ✅ confirmada (curva em U), ❌ na causa atribuída |
 
@@ -95,8 +95,27 @@ do enriquecimento. Deixo escrita a pergunta que a F1 precisa fechar:
   ritmo) que a nota não mostra?
 - **H3** — gêneros diferem nos aspectos citados? *Pergunta para a F1:* a distribuição de aspectos
   por `genre_stats` difere de forma significativa entre os gêneros de maior volume?
-- **H5** — nota e sentimento divergem? *Pergunta para a F1:* em que fração das reviews o
-  sentimento do texto contradiz a nota dada, e isso se concentra em algum gênero ou faixa?
+- ~~**H5**~~ — **respondida em 2026-09-29**, ver abaixo.
+
+## H5 — Nota e sentimento divergem ⚠️ existe, mas é minoria
+
+Reproduzível por `consultas.divergencia_nota_sentimento`, sobre as 19.145 avaliações da amostra
+com ao menos um aspecto extraído. A função devolve os **dois denominadores** de propósito, porque
+citar a porcentagem sem dizer sobre o quê confunde:
+
+| divergência | dentro da classe de nota | sobre todas as avaliações |
+|---|---|---|
+| nota alta (≥4) com texto majoritariamente negativo | **2,5%** (291 de 11.597) | 1,52% |
+| nota baixa (≤2) com texto majoritariamente positivo | **3,5%** (129 de 3.733) | 0,67% |
+
+O condicional é o que responde a hipótese: de cada 40 avaliações de nota alta, uma tem texto que
+puxa para o outro lado. A divergência **existe e é mensurável, mas é fenômeno de minoria** — mesmo
+veredito de H4, e pela mesma razão: serve como filtro de casos interessantes, não como lente
+principal de leitura da base.
+
+Esta é a via pela qual H5 foi respondida **sem** a etapa 2 da spec 02 (encoder de sentimento sobre
+as 2.239.998): o sentimento por aspecto da amostra responde a mesma pergunta. Registrado na
+ADR-015.
 
 ---
 

@@ -1,8 +1,10 @@
 # 04 — Agente de Q&A, ferramentas e estado
-Status: em implementação (v0.1) — roteador determinístico pronto e testado; `find_interview_candidates`
-e `export_report` implementados (2026-09-29); `sql_query`/`search_reviews` como tools formais do
-loop ReAct, `ConversationState` e o loop de 5 passos seguem pendentes · Framework: **loop
-explícito** (ADR-003, aceita)
+Status: em implementação (v0.1) — roteador determinístico pronto e testado, incluindo intenção
+mista (ranking por aspecto → busca semântica filtrada, sequência fixa de 2 passos, ver seção
+"Loop ReAct" abaixo); `find_interview_candidates`, `export_report` e memória de conversa (recorte
+de `ConversationState`) implementados (2026-09-29); `sql_query` genérico com validação AST
+(sqlglot) e o planejador de N passos com escolha livre de ferramenta seguem pendentes por decisão
+de escopo · Framework: **loop explícito** (ADR-003, aceita)
 
 ## Arquitetura
 ```
@@ -17,12 +19,28 @@ pergunta → [guardrail de entrada] → Roteador (classificação estruturada)
 ```
 Roteamento determinístico primeiro; ReAct só quando a pergunta combina fontes. Menos passos = menos custo e menos erro.
 
+### Loop ReAct — implementado como sequência fixa, não planejador genérico
+
+O "mista" acima não é um LLM escolhendo dinamicamente qual ferramenta chamar em cada passo — é
+`bri.agent.roteador._detectar_mista` reconhecendo por padrão de texto (ranking/superlativo +
+categoria autor/gênero + aspecto conhecido, as três juntas) que a pergunta precisa de duas etapas
+dependentes: (1) `consultas.ranking_por_aspecto` acha qual autor/gênero lidera menções a um
+aspecto+sentimento; (2) `buscar.buscar` faz a busca semântica filtrada pelo resultado do passo 1.
+Consistente com ADR-003 (loop explícito) e com o resto do projeto: determinístico primeiro, LLM só
+para narração final — nunca controle de fluxo.
+
+Fora de escopo, por decisão registrada em `DECISIONS.md`, não corte silencioso: a tool genérica
+`sql_query` (LLM escrevendo SQL livre, validado por AST via sqlglot) que a tabela abaixo desenha
+como visão de longo prazo, e um planejador de até 5 passos com escolha livre de ferramenta. O caso
+concreto e demonstrável (ranking → busca) está coberto; perguntas que exigem mais de duas etapas
+dependentes ainda caem em FORA_DE_ESCOPO.
+
 ## Ferramentas (escopo de permissão)
 | Tool | Faz | Limites | Confirmação humana |
 |---|---|---|---|
 | `sql_query` | SELECT no DuckDB | conexão read-only; só tabelas da allowlist; AST validada (sqlglot); LIMIT forçado; timeout | não |
 | `search_reviews` | busca híbrida | k ≤ 50; filtros tipados | não |
-| `get_summary` | lê `entity_summaries` | só leitura | não |
+| `get_summary` | lê `entity_summaries` — **existe desde 2026-09-29**: autor e gênero, piso de 20 avaliações analisadas. Exposto hoje pelas telas de entidade, não pelo chat (ver abaixo) | só leitura | não |
 | `find_interview_candidates` | ranking de usuários | retorna IDs pseudonimizados + justificativa | **sim** para revelar/exportar |
 | `export_report` | gera CSV | escreve só em `reports/exports/` | **sim** |
 

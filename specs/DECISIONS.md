@@ -386,6 +386,64 @@ Consequências:
 − sem MMR nem rerank, a ordenação final depende inteiramente da qualidade da fusão RRF — aceitável
   na escala atual, revisar se a queixa de qualidade de ranking aparecer
 
+### ADR-015 — Sentimento sobre a base completa não será construído
+Data: 2026-09-29 · Status: **aceita**
+Contexto: a etapa 2 da spec 02 previa um encoder (tipo RoBERTa) rodando sobre as 2.239.998
+avaliações, com a razão declarada de "comparar com a nota → H5". Uma revisão técnica mostrou que a
+etapa nunca foi construída e que a spec seguia afirmando uma saída inexistente.
+Decisão: **não construir; emendar a spec.** Três razões, na ordem do peso:
+- **H5 já está respondida sem ela.** O sentimento por aspecto que a extração produziu responde a
+  mesma pergunta: 2,5% das avaliações de nota alta têm texto majoritariamente negativo e 3,5% das
+  de nota baixa têm texto positivo (`consultas.divergencia_nota_sentimento`, sobre 19.145
+  avaliações com aspecto). Construir um segundo medidor de sentimento para responder uma pergunta
+  já respondida é trabalho sem pergunta.
+- Exigiria `transformers`+`torch`: dependência pesada contra o enxuto que a ADR-004 estabeleceu
+  quando levou o pipeline inteiro para `gemma4:12b` local.
+- Inferência sobre 2,24M de textos são horas a dias de máquina, para um ganho não demonstrado.
+Alternativas descartadas: destilar para modelo pequeno (spec 07, fora de escopo); rodar o encoder
+só na amostra (a amostra já tem sentimento melhor — por aspecto, com evidência literal verificada).
+Consequências:
++ a spec 02 passa a descrever o que o projeto é, em vez de uma saída que ninguém construiria
++ o número de H5 vira função, reproduzível por script como o AGENTS.md exige — antes ele existia
+  só em conversa e na apresentação
+− `review_enriched` nunca terá coluna de sentimento da review inteira: **toda afirmação de
+  "sentimento" neste projeto é por aspecto**, na amostra de 19.947
+− a amostra é estratificada com pesos (`sampling.py`), então extrapolar esses percentuais direto
+  para as 2,24M exige corrigir a calibragem — está dito em `reports/sampling.md`
+
+### ADR-016 — Tópicos por k-means sobre os embeddings existentes, não BERTopic
+Data: 2026-09-29 · Status: **aceita**
+Contexto: a etapa 4 da spec 02 nomeia BERTopic. Os 22.006 embeddings de 768 dimensões da amostra
+**já existem** em `review_chunks`, pagos na rodada de RAG (ADR-014).
+**Medido antes de decidir**, com k-means esférico (seed 42) e silhueta de cosseno em subamostra
+fixa de 3.000:
+
+| k | coesão | silhueta | menor cluster |
+|---|---|---|---|
+| 8 | 0,5810 | +0,0272 | 1.780 |
+| **20** | **0,6021** | **+0,0247** | **382** |
+| 40 | 0,6174 | +0,0167 | 83 |
+
+Dois achados que decidem a ADR: **não existe cotovelo** (a coesão sobe monotonicamente com k, como
+sempre — coesão sozinha não escolhe k) e **a silhueta fica em ~0,02 em todo o intervalo de 8 a 60**.
+Silhueta 0,02 é estrutura fraca: avaliações de livro não formam agrupamentos disjuntos no espaço do
+`embeddinggemma`. Isso não é defeito do método, é propriedade do dado — e é o argumento mais forte
+contra o BERTopic: HDBSCAN sobre essa geometria devolveria a maior parte dos pontos como ruído, ao
+custo de três dependências novas (`umap`, `hdbscan`, `sentence-transformers`).
+Decisão: k-means esférico em numpy (os vetores já são unitários, então cosseno é produto interno),
+**k=20 por medição** — silhueta em platô, menor cluster 382 acima do piso de 300, e 20 rótulos é o
+que um humano revisa numa sentada, que é o que a spec 02 exige. Rótulos gerados pelo `gemma4:12b`
+a partir dos chunks mais centrais, editáveis à mão no JSONL antes de carregar.
+Consequências:
++ zero dependência pesada; `numpy` passa de transitivo a declarado, o que conserta uma dependência
+  oculta que já existia
++ reagrupar com outro k é um comando, não uma reindexação: os embeddings não são recalculados
+− **a saída é "tema exploratório", não "o tópico da review"** — e precisa ser rotulada assim na
+  tela e no relatório. Com silhueta 0,02, tratar o rótulo como verdade sobre a review seria vender
+  precisão que a medição não sustenta
+− `chunk_topics` é tabela de ligação, não coluna em `review_chunks`: `make index` faz
+  `CREATE OR REPLACE TABLE` e apagaria a coluna em silêncio
+
 ## Log de sessão
 <!-- AAAA-MM-DD — o que foi feito, decisão tomada, próximo passo -->
 - 2026-09-21 — Reorganização do repositório: specs consolidadas em português em `specs/`,
@@ -584,3 +642,140 @@ Consequências:
   Verificado ponta a ponta com `TestClient` contra o banco e o Ollama reais (não só mock): cookie
   criado na primeira visita, segunda pergunta sem nome herdando "Agatha Christie" da primeira,
   histórico mostrando os dois turnos no GET seguinte, e o botão de limpar removendo o filtro.
+- 2026-09-29 — **Golden set gerado (200 avaliações) e comparado contra a extração real; achado
+  de taxonomia registrado, correção adiada para depois do MVP por decisão do Michael.**
+  `reports/evals/golden_aspectos.csv` (100 dirigidas ao aspecto `ritmo` + 100 amostra aleatória,
+  seed 42) foi anotado por um LLM forte (Opus 5, não humano — golden set humano da spec 06
+  continua pendente) e comparado contra `review_enriched` via `evals/comparar_aspectos.py`
+  (script novo, sem `pandas` — a stack do projeto é `duckdb`; substitui um script anterior que
+  não rodava aqui). Achados que independem da qualidade do gabarito:
+  - a categoria `outro` é gaveta de resíduo de fato, não só de nome: 18,3% de todas as
+    avaliações, pior precisão de todas (0,333 na metade aleatória não-enviesada), e cerca de
+    metade das evidências lidas à mão são dois temas coerentes e recorrentes — utilidade/serve ao
+    propósito (livro técnico não tem "enredo") e material de apoio (fotos, ilustrações, mapas,
+    áudio/CD). O restante seguiria em `outro` normalmente.
+  - o modelo quase nunca usa o sentimento `misto` (43 de 45.847 aspectos no corpus, 0,09%):
+    quando o texto é ambivalente, o modelo às vezes emite o mesmo aspecto duas vezes com
+    sentimentos opostos (21/200 no golden) em vez de usar `misto`, que existe no schema.
+  - `ritmo` tem recall baixo fora da amostra dirigida a ele: 0 de 6 casos reais na metade
+    aleatória — o F1 alto visto antes era artefato da seleção, não desempenho real.
+  Proposta (não implementada): duas categorias novas — `conteúdo` e `material_de_apoio` — que
+  fariam `outro` cair de 18,3% para ~8% do corpus. Custo estimado: só o subconjunto afetado
+  precisaria de reextração (tem `outro`, ou tem `enredo` em livro de categoria técnica sem
+  nenhuma tag *Fiction*) — 4.669 de 19.947 avaliações (23,4%), ~4h de GPU pela taxa medida no
+  enriquecimento original (17h43 para 19.947), não as 17h43 inteiras. **Decisão do Michael:
+  não fazer agora.** Terminar o MVP com a taxonomia atual; revisitar isso, se fizer sentido,
+  depois que o MVP estiver fechado. Para deixar claro: isto não é reentreinar um modelo — é
+  rodar de novo a mesma extração por prompt (inferência), sem ajustar peso nenhum; o custo é
+  puramente de tempo de máquina repetindo a leitura das avaliações afetadas.
+- 2026-09-29 — **Intenção MISTA implementada: loop ReAct do diagrama da spec 04, como sequência
+  fixa de 2 passos.** Perguntas que combinam ranking analítico e busca semântica dependente do
+  resultado (ex.: "qual autor tem mais reclamação de ritmo, e o que os leitores dizem sobre
+  isso?") caíam em FORA_DE_ESCOPO — não havia como encadear duas ferramentas. Implementado:
+  `roteador._detectar_mista` reconhece a pergunta por três condições juntas (ranking/superlativo
+  + categoria autor/gênero + aspecto conhecido da spec 02); passo 1 chama
+  `consultas.ranking_por_aspecto` (nova, ranqueia autor via `book_authors` ou gênero via
+  `unnest(categories)`, piso de 3 menções para não deixar 1 leitor isolado decidir o ranking);
+  passo 2 chama `buscar.buscar` filtrado pela entidade encontrada. **Decisão de escopo**: não é
+  um LLM escolhendo ferramenta dinamicamente nem a tool genérica `sql_query` com sqlglot que a
+  tabela da spec 04 desenha como visão de longo prazo — é Python decidindo com padrão de texto,
+  mesmo estilo de `classificar()`, consistente com ADR-003 (loop explícito, determinístico
+  primeiro). Perguntas com mais de duas etapas dependentes continuam fora de escopo.
+  Achado ao implementar, corrigido antes de virar bug: `classificar()` testava `TERMOS` antes de
+  qualquer coisa, e "qual autor tem mais reclamação de ritmo" bateria em `TERMOS[AUTOR]` pelo
+  termo "autor" sem nunca chegar a MISTA — reordenado para checar MISTA primeiro. Verificado que
+  nenhum teste existente muda de resultado com a reordenação (as três condições de MISTA nunca
+  batem juntas em nenhuma pergunta já coberta).
+  Achado ao verificar contra o banco real: `narrador.py` já funcionava sem nenhuma mudança de
+  código para uma `Resposta` com `dados` e `trechos` preenchidos ao mesmo tempo —
+  `_numeros_em_linhas(resposta.dados)` já rodava incondicional, fora do `if/else` que só decide a
+  fonte das citações. Só faltava o teste de regressão que trava esse comportamento hoje implícito.
+  Testado ponta a ponta com o banco e o Ollama reais: "qual autor tem mais reclamação de ritmo,
+  e o que os leitores dizem sobre isso?" achou Robert Jordan (série A Roda do Tempo, 50 menções de
+  ritmo negativo), 8 trechos de busca semântica filtrados por ele — confirmado que os 4 títulos
+  distintos citados são de fato do Robert Jordan —, e a narração produziu resposta coerente com o
+  número do ranking, confiança alta.
+- 2026-09-29 — **Revisão técnica do projeto: 7 achados, 6 corrigidos na mesma rodada.**
+  - **PII, o mais grave**: `/api/entrevistas` devolvia o `user_hash` inteiro, contornando o gate
+    que a tela HTML aplica (trunca em 12 chars, com teste). A spec 04 exige confirmação humana
+    para revelar o identificador; a API revelava sem gate nenhum, e nenhum teste cobria esse
+    caminho. Corrigido **na origem**, não na rota: `candidatos_a_entrevista` passa a devolver
+    `prefixo` (`substr(user_hash, 1, 12)`), então nenhum consumidor novo consegue vazar de novo.
+    Teste de regressão cobrindo a API.
+  - **Defeito de desenho no ranking por aspecto, introduzido na véspera**: `ranking_por_aspecto`
+    ordenava por contagem absoluta, o que responde "qual é o maior", não "qual é o pior".
+    Medido: "tradução negativa" devolvia Fiction (30 menções, 0,2% das menções do gênero) em vez
+    de Bibles (6,1% — trinta vezes mais concentrado); "preço" devolvia Fiction em vez de
+    Technology & Engineering. Taxa crua também não serve: gênero com 3 menções chegava a 100%.
+    Corrigido com **encolhimento bayesiano** — o mesmo remédio, e o mesmo `m=50`, que
+    `author_stats.nota_bayesiana` já usava para o mesmo problema —, mais piso duplo (3 menções do
+    aspecto, 50 da entidade, igual ao prior, para o dado próprio pesar ao menos metade). A
+    resposta passa a citar a taxa, não só a contagem, porque a taxa é o critério. Ironia
+    registrada: a própria apresentação (slide 6) alerta o negócio a nunca ranquear por média
+    simples, enquanto o código fazia exatamente isso. `ritmo → Robert Jordan` sobrevive à
+    correção (16,3%), agora por mérito de taxa, então o slide 10 segue válido.
+  - `chat.html` afirmava na tela que pergunta mista "ainda não existe" — implementada no dia
+    anterior. Segunda vez que esse mesmo bloco de texto fica obsoleto.
+  - `/api/autores` com ordenação fora da allowlist deixava `ValueError` escapar → HTTP 500 para
+    erro de cliente. Agora 400. A injeção de SQL já estava bloqueada; o defeito era o status.
+  - `summarize.md` declarava `used_by: summarize/mapreduce.py`, arquivo que nunca existiu. Front
+    matter agora diz a verdade, em vez de apontar para consumidor inexistente.
+  - Figuras de EDA rotulavam no padrão americano (1,340,287). Formatador de milhar com ponto
+    aplicado aos 5 eixos de contagem; figuras regeradas.
+  - **Achado 3, não corrigido — decisão de escopo pendente do Michael**: a spec 02 promete cinco
+    etapas e três saídas; **três etapas nunca foram construídas** (sentimento sobre a base
+    completa, tópicos/BERTopic, sumarização hierárquica) e **duas das três saídas não existem**
+    (`entity_summaries`, `topics`). `review_enriched` não tem as colunas `sentimento`/`tópico`
+    que a spec declara. Consequência em cadeia: a tool `get_summary` da spec 04 é inimplementável
+    hoje, porque sua fonte de dados nunca foi criada. Zero referências a esses nomes no código.
+    As opções são construir as etapas ou corrigir a spec 02 para descrever o que o projeto de
+    fato é — o que não pode continuar é a spec afirmar saídas que não existem.
+- 2026-09-29 — **Achado 3 da revisão resolvido: a spec 02 e o código voltam a descrever a mesma
+  coisa.** O Michael pediu para implementar. Duas etapas construídas, uma encerrada por decisão:
+  - **Etapa 4 (tópicos)** — `nlp/topicos.py`, k-means esférico sobre os 22.006 embeddings que já
+    existiam, k=20 escolhido pela varredura em `reports/topicos.md`. Saídas: `topics` (20 temas) e
+    `chunk_topics` (22.006 ligações, zero órfão). **Bug real meu, pego só ao rodar contra o banco
+    de verdade**: o centroide era somado sem normalizar dentro do laço, e como a atribuição é
+    produto interno, a magnitude (= tamanho do cluster) decidia no lugar do ângulo — todo k
+    colapsava num único grupo de 22.006. Os testes não pegaram porque a fixture tinha três grupos
+    do **mesmo tamanho**, onde as magnitudes empatam e o defeito se esconde; corrigido, e coberto
+    por teste novo com grupos desbalanceados. Dois dos 20 temas saíram rotulados como
+    `misturado` — a saída de escape do prompt funcionando, e coerente com a silhueta de 0,02.
+  - **Etapa 5 (sumarização)** — `nlp/sumarizar.py`, um resumo por entidade com quatro
+    verificadores reaproveitados (schema, `citacoes_invalidas`, literalidade da citação,
+    `numeros_invalidos`). `ResumoRedigido` (só prosa) vai ao `format` do Ollama e `EntitySummary`
+    é a linha da tabela: com a contagem fora do schema de saída, o modelo fica **incapaz de
+    inventá-la**, porque número em campo estruturado não passaria pelo guardrail, que só varre
+    prosa. **Achado do piloto de 5, que mudou o prompt antes do lote**: o resumo da Ayn Rand
+    sustentava afirmações sobre narrativa com trechos sobre a **capa** do livro — citação literal,
+    da entidade certa, e ainda assim sem relação com a frase. As citações passaram a chegar
+    marcadas com `aspecto` e `sentimento` (v0.2.1) e o problema sumiu na repetição do piloto.
+  - **Etapa 2 (sentimento sobre a base inteira)** — encerrada por ADR-015, com H5 virando código
+    (`consultas.divergencia_nota_sentimento`) antes de a ADR se apoiar no número. Descoberta no
+    caminho: os 2,5%/3,5% que já estavam na apresentação **estão certos**, mas o denominador não
+    estava dito em lugar nenhum — a função devolve os dois (dentro da classe de nota e sobre o
+    total) justamente para ninguém ter de adivinhar.
+  Também corrigido: `summarize.md` deixou de ser rascunho órfão e virou v0.2.1 ligada a código,
+  sem os campos `prevalence`/`recommended_actions` que não existiam no schema — mesma classe de
+  problema do `score_text_mismatch`, que vazou de arquivo morto para produção. `numpy` passou de
+  dependência oculta (transitiva) a declarada. `make eval-smoke` rodado por exigência da spec 09
+  (prompt mudou de versão): sem regressão, 4 critérios bloqueantes em 100%.
+  **Terceiro bug meu da rodada, e o que mais comprometia a saída**: os resumos saíam com 54% (75
+  de 138) sem nenhum ponto forte, contra zero sem pontos fracos — média de 0,89 fortes para 5,18
+  fracos. O dado não justificava: o corpus tem 29.207 aspectos positivos contra 16.324 negativos.
+  A causa era a seleção de citações: `citacoes_da_entidade` devolvia os dois lados equilibrados
+  (16 e 16 para o Robert Jordan), mas ordenados por sentimento — e "negativo" vem antes de
+  "positivo" no alfabeto. O corte em `MAX_CITACOES` pegava as 12 primeiras e mandava **12
+  negativas e zero positivas**; o modelo estava certo em não listar pontos fortes, porque nunca
+  recebeu nenhum. Corrigido intercalando os sentimentos antes do corte (6 e 6), com teste de
+  regressão. Depois da correção: **0 de 138 sem pontos fortes**, média 3,2 fortes contra 3,32
+  fracos — e o lote inteiro refeito, 36,5 min.
+  Padrão que vale registrar dos três bugs desta rodada: **nenhum apareceu em teste unitário, os
+  três só contra dado real**. O k-means colapsava só com grupos de tamanhos diferentes (a fixture
+  tinha grupos iguais, onde as magnitudes empatam); o `review_id` na prosa só aparecia como
+  "número impossível" ao ver o valor rejeitado; e o desequilíbrio de citações exigia olhar o que
+  de fato ia ao modelo, não o que a consulta devolvia. Os três agora têm teste.
+  Verificação final do lote: 75 autores + 63 gêneros, **zero citação de entidade errada** (o furo
+  que eu apontara como mais provável não se materializou), zero dígito na prosa, zero resumo sem
+  citação, e as telas de autor/gênero mostrando o resumo — com legenda de ausência quando a
+  entidade não atinge o piso.
