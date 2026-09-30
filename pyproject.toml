@@ -9,6 +9,9 @@ dependencies = [
     "fastapi>=0.115",
     "jinja2>=3.1",
     "matplotlib>=3.9",
+    # k-means dos tópicos (ADR-016). Já estava na árvore via matplotlib/pyarrow; declarar corrige
+    # uma dependência oculta, sem download novo.
+    "numpy>=2.1",
     "polars>=1.17",
     "pyarrow>=18",
     "pydantic>=2.9",
