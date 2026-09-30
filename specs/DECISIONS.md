@@ -779,3 +779,21 @@ Consequências:
   que eu apontara como mais provável não se materializou), zero dígito na prosa, zero resumo sem
   citação, e as telas de autor/gênero mostrando o resumo — com legenda de ausência quando a
   entidade não atinge o piso.
+- 2026-09-30 — **Registrado em `specs/00-overview.md` por que o MVP não se declara concluído.**
+  O entregável de código de F1 a F4 está completo, mas quatro dos cinco critérios de saída não
+  foram cumpridos, e nenhum depende de código: golden set rotulado (F2, e por tabela F1), lista
+  de entrevista validada na prática (F3) e revisão de storytelling mais as três premissas de
+  negócio (F4). O caso mais pesado é a rotulagem manual de 200 avaliações — trabalho braçal, que
+  exige atenção contínua e que **não pode ser terceirizado ao próprio modelo**, porque usar a IA
+  para avaliar a IA é circular e não prova nada.
+  **Decisão: adiar, e dizer isso por escrito.** Não há hoje tempo nem mão de obra para a
+  rotulagem; fazê-la às pressas produziria gabarito ruim — pior que gabarito nenhum — e travar o
+  resto do projeto esperando por ela seria pior ainda. Entregamos o sistema funcionando, com os
+  limites escritos na spec 00, e deixamos a medição formal para quando houver disponibilidade
+  real.
+  F2 e F3 seguem **não marcadas** como concluídas na tabela do roadmap, deliberadamente: marcar
+  contradiria o critério que a própria spec define, e um roadmap que se declara cumprido sem
+  cumprir o que escreveu para de servir para qualquer coisa. O que se sabe de verdade sobre
+  qualidade — 97,0% de citação literal, gradiente de sentimento, red-team, zero citação de
+  entidade errada — mede **consistência**, não **acerto**, e a distinção está registrada para
+  ninguém confundir as duas ao ler os números.
