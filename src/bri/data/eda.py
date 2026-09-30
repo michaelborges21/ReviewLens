@@ -10,8 +10,9 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.axes import Axes  # noqa: E402
 from matplotlib.figure import Figure  # noqa: E402
-from matplotlib.ticker import MaxNLocator  # noqa: E402
+from matplotlib.ticker import FuncFormatter, MaxNLocator  # noqa: E402
 
 from bri.data.process import BANCO  # noqa: E402
 
@@ -31,6 +32,13 @@ def _uma_linha(
     linha = con.execute(sql, params if params is not None else []).fetchone()
     assert linha is not None
     return linha
+
+
+def _milhar_pt_br(eixo: Axes, horizontal: bool = False) -> None:
+    """Milhar com ponto: o matplotlib rotula 1,340,287 no padrão americano, e estas figuras vão
+    para a apresentação em português."""
+    formatador = FuncFormatter(lambda valor, _: f"{valor:,.0f}".replace(",", "."))
+    (eixo.xaxis if horizontal else eixo.yaxis).set_major_formatter(formatador)
 
 
 def _salvar(fig: Figure, destino: Path, nome: str) -> None:
@@ -66,10 +74,12 @@ def figura_volume(con: duckdb.DuckDBPyConnection, destino: Path) -> dict[str, An
     ax1.set_title("Reviews por ano")
     ax1.set_xlabel("ano")
     ax1.xaxis.set_major_locator(MaxNLocator(integer=True))
+    _milhar_pt_br(ax1)
     ax2.barh(
         [c for c, _ in reversed(por_genero)], [n for _, n in reversed(por_genero)], color="#55A868"
     )
     ax2.set_title(f"Top {TOP_N} gêneros por volume de reviews")
+    _milhar_pt_br(ax2, horizontal=True)
     _salvar(fig, destino, "01_volume.png")
 
     return {"reviews_por_ano": dict(por_ano), "share_1pct_usuarios": concentracao[0]}
@@ -95,6 +105,7 @@ def figura_distribuicao_notas(con: duckdb.DuckDBPyConnection, destino: Path) -> 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.bar([str(r) for r, _ in global_], [n for _, n in global_], color="#C44E52")
     ax.set_title("Distribuição global de notas")
+    _milhar_pt_br(ax)
     ax.set_xlabel("nota")
     _salvar(fig, destino, "02_notas.png")
 
@@ -140,6 +151,7 @@ def figura_qualidade(con: duckdb.DuckDBPyConnection, destino: Path) -> dict[str,
     fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.bar(rotulos, list(medidas), color="#937860")
     ax.set_title("Problemas de qualidade (contagem de reviews)")
+    _milhar_pt_br(ax)
     ax.set_yscale("log")
     _salvar(fig, destino, "04_qualidade.png")
 
@@ -166,6 +178,7 @@ def figura_top_autores(con: duckdb.DuckDBPyConnection, destino: Path) -> dict[st
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 5))
     ax1.barh([a for a, _ in reversed(por_volume)], [n for _, n in reversed(por_volume)])
     ax1.set_title(f"Top {TOP_N} autores por volume")
+    _milhar_pt_br(ax1, horizontal=True)
     # Dot plot com eixo ampliado: em barra começando em zero, notas entre 4,7 e 4,9 viram
     # 15 barras visualmente idênticas e o leitor conclui que há empate.
     autores = [a for a, _ in reversed(por_nota)]
