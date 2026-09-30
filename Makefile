@@ -1,4 +1,5 @@
-.PHONY: setup check data eda sample enrich enrich-carregar index eval eval-smoke app
+.PHONY: setup check data eda sample enrich enrich-carregar index resumir resumir-carregar \
+        topicos topicos-medir topicos-carregar eval eval-smoke red-team app
 
 setup:
 	uv sync
@@ -29,6 +30,21 @@ enrich-carregar:
 
 index:
 	uv run python -m bri.retrieval.indexar
+
+resumir:
+	uv run python -m bri.nlp.sumarizar $(if $(LIMITE),--limite $(LIMITE))
+
+resumir-carregar:
+	uv run python -m bri.nlp.sumarizar --carregar
+
+topicos-medir:
+	uv run python -m bri.nlp.topicos --medir
+
+topicos:
+	uv run python -m bri.nlp.topicos $(if $(K),--k $(K))
+
+topicos-carregar:
+	uv run python -m bri.nlp.topicos --carregar
 
 eval:
 	@echo "ainda não implementado — ver specs/06-evals.md"; exit 1

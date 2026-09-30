@@ -59,6 +59,9 @@ make eda        # figuras e números do checklist da spec 01 em reports/
 make sample     # amostra estratificada + estimativa de custo em reports/sampling.md
 make enrich     # pipeline NLP offline (exige estimativa de custo aprovada)
 make index      # constrói índices de retrieval
+make topicos-medir  # varredura de k para os tópicos (sem GPU); escreve reports/topicos.md
+make topicos    # agrupa os embeddings e rotula os temas por LLM local
+make resumir    # resumo por entidade (autor/gênero) com citação verificada
 make eval       # roda specs/06 (subconjunto rápido: make eval-smoke)
 make app        # sobe a UI Streamlit
 ```
