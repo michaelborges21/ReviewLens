@@ -1,13 +1,22 @@
 """Consultas somente-leitura sobre a camada processed — o que as telas e a API leem."""
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import duckdb
 
 from bri.data.process import BANCO
+from bri.schemas.aspectos import Aspecto, Sentimento
 
 LIMITE_PADRAO = 25
+# 1-2 menções isoladas não deviam decidir "quem mais reclama de X" — 3 é o piso mais baixo que
+# ainda descarta um único leitor obcecado com o mesmo aspecto.
+PISO_MENCOES_ASPECTO = 3
+# Prior do encolhimento, igual ao `m` da nota bayesiana de `author_stats`: mesma lógica, mesmo
+# número. O piso de menções da entidade é o próprio prior, então o dado da entidade sempre pesa
+# ao menos metade — abaixo disso a taxa é ruído (um gênero com 3 menções chegava a 100%).
+PRIOR_ENCOLHIMENTO = 50
+PISO_MENCOES_ENTIDADE = PRIOR_ENCOLHIMENTO
 
 
 def conectar(caminho: Path = BANCO) -> duckdb.DuckDBPyConnection:
@@ -154,11 +163,15 @@ def candidatos_a_entrevista(
 
     Sem aspectos (F1), profundidade é aproximada pelo comprimento — e H2 mostrou que quem dá 5
     escreve menos, então nota extrema não é sinal de bom entrevistado.
+
+    Devolve `prefixo`, não o `user_hash` inteiro: a spec 04 exige confirmação humana para revelar
+    o identificador, e truncar aqui — não no template — impede que um consumidor novo (a API JSON
+    já vazou assim uma vez) exponha o hash completo sem passar pelo gate.
     """
     return _linhas(
         con,
         """
-        SELECT user_hash,
+        SELECT substr(user_hash, 1, 12) AS prefixo,
                n_reviews,
                nota_media,
                comprimento_mediano,
@@ -170,6 +183,163 @@ def candidatos_a_entrevista(
         """,
         [limite],
     )
+
+
+_ORIGEM_ENTIDADE = {
+    "autor": """
+        SELECT ba.author AS entidade, re.review_id, re.aspects
+        FROM review_enriched re
+        JOIN enrichment_sample es ON es.review_id = re.review_id
+        JOIN book_authors ba ON ba.title = es.title
+    """,
+    # Um livro em várias categorias conta em todas — mesmo unnest de stats.criar_genre_stats.
+    "genero": """
+        SELECT lc.categoria AS entidade, re.review_id, re.aspects
+        FROM review_enriched re
+        JOIN enrichment_sample es ON es.review_id = re.review_id
+        JOIN (SELECT title, unnest(categories) AS categoria FROM books WHERE categories IS NOT NULL)
+             lc ON lc.title = es.title
+    """,
+}
+
+
+def ranking_por_aspecto(
+    con: duckdb.DuckDBPyConnection,
+    tipo: Literal["autor", "genero"],
+    aspecto: Aspecto,
+    sentimento: Sentimento,
+    piso_aspecto: int = PISO_MENCOES_ASPECTO,
+    piso_entidade: int = PISO_MENCOES_ENTIDADE,
+) -> dict[str, Any] | None:
+    """Ranqueia autor OU gênero por **taxa encolhida** de menções a um aspecto+sentimento.
+
+    Não por contagem absoluta: contagem responde "qual é o maior", não "qual é o pior". Medido
+    contra o banco — ordenando por contagem, "tradução negativa" devolvia Fiction (30 menções,
+    0,2% das suas menções) em vez de Bibles (6,1%, trinta vezes mais concentrado). Mas taxa crua
+    também não serve: um gênero com 3 menções chegava a 100%. O encolhimento bayesiano é o mesmo
+    remédio que `author_stats.nota_bayesiana` já usa para o mesmo problema.
+
+    None quando review_enriched não existe ainda, ou quando nenhuma entidade atinge os dois pisos —
+    o roteador decide como recusar, esta função só informa "não há resposta confiável".
+    """
+    if not _tabela_existe(con, "review_enriched"):
+        return None
+
+    sql = f"""
+        WITH base AS ({_ORIGEM_ENTIDADE[tipo]}),
+        expandido AS (SELECT entidade, unnest(aspects) AS a FROM base),
+        mencoes_da_entidade AS (
+            SELECT entidade, count(*) AS mencoes_totais FROM expandido GROUP BY entidade
+        ),
+        taxa_global AS (
+            SELECT 1.0 * sum(CASE WHEN (a).aspect = ? AND (a).sentiment = ? THEN 1 ELSE 0 END)
+                       / count(*) AS taxa
+            FROM expandido
+        ),
+        alvo AS (
+            SELECT entidade, count(*) AS n_mencoes FROM expandido
+            WHERE (a).aspect = ? AND (a).sentiment = ? GROUP BY entidade
+        )
+        SELECT alvo.entidade,
+               alvo.n_mencoes,
+               ent.mencoes_totais,
+               100.0 * alvo.n_mencoes / ent.mencoes_totais AS taxa_crua,
+               100.0 * (
+                   (ent.mencoes_totais / (ent.mencoes_totais + {PRIOR_ENCOLHIMENTO}.0))
+                       * (1.0 * alvo.n_mencoes / ent.mencoes_totais)
+                 + ({PRIOR_ENCOLHIMENTO}.0 / (ent.mencoes_totais + {PRIOR_ENCOLHIMENTO}.0))
+                       * taxa_global.taxa
+               ) AS taxa_encolhida
+        FROM alvo
+        JOIN mencoes_da_entidade ent ON ent.entidade = alvo.entidade
+        CROSS JOIN taxa_global
+        WHERE alvo.n_mencoes >= ? AND ent.mencoes_totais >= ?
+        ORDER BY taxa_encolhida DESC LIMIT 1
+    """
+    linhas = _linhas(
+        con, sql, [aspecto, sentimento, aspecto, sentimento, piso_aspecto, piso_entidade]
+    )
+    if not linhas:
+        return None
+    return {**linhas[0], "sql": sql}
+
+
+def entidades_com_aspectos(
+    con: duckdb.DuckDBPyConnection, tipo: Literal["autor", "genero"], piso: int
+) -> list[tuple[str, int]]:
+    """Autores ou gêneros com ao menos `piso` avaliações analisadas, em ordem estável.
+
+    Ordem alfabética, não por volume: a retomada do sumarizador depende de a lista não mudar
+    entre sessões, e volume muda se a amostra crescer.
+    """
+    if not _tabela_existe(con, "review_enriched"):
+        return []
+    linhas = _linhas(
+        con,
+        f"""
+        WITH base AS ({_ORIGEM_ENTIDADE[tipo]})
+        SELECT entidade, count(DISTINCT review_id) AS n_avaliacoes
+        FROM base GROUP BY entidade HAVING n_avaliacoes >= ? ORDER BY entidade
+        """,
+        [piso],
+    )
+    return [(str(linha["entidade"]), int(linha["n_avaliacoes"])) for linha in linhas]
+
+
+def citacoes_da_entidade(
+    con: duckdb.DuckDBPyConnection,
+    tipo: Literal["autor", "genero"],
+    entidade: str,
+    por_aspecto_e_sentimento: int = 2,
+) -> list[dict[str, Any]]:
+    """Trechos literais com review_id real, equilibrados entre elogio e crítica.
+
+    Ordem determinística (evidência mais longa primeiro, empate pelo review_id): o `any_value` que
+    a agregação usa serve a uma célula de tabela, não a um contexto de prompt que precisa ser
+    reproduzível entre execuções.
+    """
+    if not _tabela_existe(con, "review_enriched"):
+        return []
+    return _linhas(
+        con,
+        f"""
+        WITH base AS ({_ORIGEM_ENTIDADE[tipo]}),
+        expandido AS (SELECT review_id, entidade, unnest(aspects) AS a FROM base),
+        ranqueado AS (
+            SELECT review_id,
+                   (a).aspect AS aspecto,
+                   (a).sentiment AS sentimento,
+                   (a).evidence AS trecho,
+                   row_number() OVER (
+                       PARTITION BY (a).aspect, (a).sentiment
+                       ORDER BY length((a).evidence) DESC, review_id
+                   ) AS posicao
+            FROM expandido
+            WHERE entidade = ? AND (a).sentiment IN ('negativo', 'positivo')
+        )
+        SELECT review_id, aspecto, sentimento, trecho
+        FROM ranqueado WHERE posicao <= ?
+        ORDER BY sentimento, aspecto, review_id
+        """,
+        [entidade, por_aspecto_e_sentimento],
+    )
+
+
+def resumo_da_entidade(
+    con: duckdb.DuckDBPyConnection, tipo: Literal["autor", "genero"], entidade: str
+) -> dict[str, Any] | None:
+    """None quando entity_summaries não existe ou a entidade não atingiu o piso de avaliações.
+
+    Chave é o par tipo+id: "Fiction" é gênero e também pode ser nome de autor.
+    """
+    if not _tabela_existe(con, "entity_summaries"):
+        return None
+    linhas = _linhas(
+        con,
+        "SELECT * FROM entity_summaries WHERE entity_type = ? AND entity_id = ?",
+        [tipo, entidade],
+    )
+    return linhas[0] if linhas else None
 
 
 def candidato_por_prefixo(con: duckdb.DuckDBPyConnection, prefixo: str) -> dict[str, Any] | None:
@@ -302,6 +472,51 @@ def aspectos_do_genero(con: duckdb.DuckDBPyConnection, categoria: str) -> dict[s
         [categoria],
     )[0]["n"]
     return {"aspectos": aspectos, "avaliacoes_analisadas": analisadas, "avaliacoes_totais": totais}
+
+
+def divergencia_nota_sentimento(con: duckdb.DuckDBPyConnection) -> dict[str, Any] | None:
+    """Veredito de H5: em que fração das avaliações o texto contradiz a nota dada.
+
+    Substitui a etapa 2 da spec 02 (encoder de sentimento sobre as 2.239.998, ADR-015): o
+    sentimento por aspecto da amostra responde a mesma pergunta sem inferência sobre a base toda.
+
+    Devolve os **dois denominadores** de propósito. "2,5% das avaliações de nota alta contradizem"
+    e "1,5% de todas as avaliações são nota alta contradita" são os dois verdadeiros e medem
+    coisas diferentes — citar a porcentagem sem dizer sobre o quê é o jeito de confundir na
+    apresentação. O condicional é o que responde a hipótese; o geral dá a dimensão no corpus.
+    """
+    if not _tabela_existe(con, "review_enriched"):
+        return None
+    linha = _linhas(
+        con,
+        """
+        WITH por_review AS (
+            SELECT re.review_id,
+                   any_value(es.rating) AS nota,
+                   sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) AS negativos,
+                   sum(CASE WHEN (a).sentiment = 'positivo' THEN 1 ELSE 0 END) AS positivos
+            FROM review_enriched re, UNNEST(re.aspects) AS t(a)
+            JOIN enrichment_sample es ON es.review_id = re.review_id
+            GROUP BY re.review_id
+        )
+        SELECT count(*) AS avaliacoes_com_aspecto,
+               sum(CASE WHEN nota >= 4 THEN 1 ELSE 0 END) AS nota_alta,
+               sum(CASE WHEN nota >= 4 AND negativos > positivos THEN 1 ELSE 0 END)
+                   AS nota_alta_texto_negativo,
+               sum(CASE WHEN nota <= 2 THEN 1 ELSE 0 END) AS nota_baixa,
+               sum(CASE WHEN nota <= 2 AND positivos > negativos THEN 1 ELSE 0 END)
+                   AS nota_baixa_texto_positivo
+        FROM por_review
+        """,
+    )[0]
+    total = linha["avaliacoes_com_aspecto"]
+    return {
+        **linha,
+        "pct_da_nota_alta": 100.0 * linha["nota_alta_texto_negativo"] / linha["nota_alta"],
+        "pct_da_nota_baixa": 100.0 * linha["nota_baixa_texto_positivo"] / linha["nota_baixa"],
+        "pct_do_total_alta": 100.0 * linha["nota_alta_texto_negativo"] / total,
+        "pct_do_total_baixa": 100.0 * linha["nota_baixa_texto_positivo"] / total,
+    }
 
 
 def numeros_gerais(con: duckdb.DuckDBPyConnection) -> dict[str, Any]:

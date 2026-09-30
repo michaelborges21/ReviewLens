@@ -11,11 +11,13 @@ from bri.data.consultas import (
     buscar_reviews,
     candidato_por_prefixo,
     candidatos_a_entrevista,
+    divergencia_nota_sentimento,
     numeros_gerais,
     performance_do_autor,
     performance_do_genero,
     ranking_de_autores,
     ranking_de_generos,
+    ranking_por_aspecto,
 )
 
 
@@ -72,6 +74,116 @@ def con() -> duckdb.DuckDBPyConnection:
     return con
 
 
+def _inserir_aspectos(
+    con: duckdb.DuckDBPyConnection,
+    titulo: str,
+    primeiro_id: int,
+    aspecto: str,
+    sentimento: str,
+    quantas: int,
+) -> None:
+    """Acrescenta N avaliações de um título à amostra, cada uma com um aspecto/sentimento."""
+    for review_id in range(primeiro_id, primeiro_id + quantas):
+        con.execute(
+            "INSERT INTO enrichment_sample VALUES (?, ?, 2.0, TIMESTAMP '2015-01-01',"
+            " 'titulo', 'texto', 'h1')",
+            [review_id, titulo],
+        )
+        con.execute(
+            "INSERT INTO review_enriched VALUES (?, [{'aspect': ?, 'sentiment': ?,"
+            " 'evidence': 'trecho'}], false)",
+            [str(review_id), aspecto, sentimento],
+        )
+
+
+def test_ranking_por_aspecto_prefere_taxa_a_volume(con: duckdb.DuckDBPyConnection) -> None:
+    """Regressão do bug de desenho: ordenar por contagem responde "qual é o maior", não "qual é o
+    pior". Tolkien tem MAIS menções de ritmo em absoluto, Frank Herbert tem taxa muito maior."""
+    # Tolkien: 30 de ritmo negativo em 130 menções (23%) — mais contagem, menos concentração
+    _inserir_aspectos(con, "Hobbit", 100, "ritmo", "negativo", 30)
+    _inserir_aspectos(con, "Hobbit", 200, "enredo", "positivo", 100)
+    # Frank Herbert: 25 de ritmo negativo em 60 menções (42%) — menos contagem, mais concentração
+    _inserir_aspectos(con, "Dune", 400, "ritmo", "negativo", 25)
+    _inserir_aspectos(con, "Dune", 500, "enredo", "positivo", 35)
+
+    ranking = ranking_por_aspecto(con, "autor", "ritmo", "negativo")
+
+    assert ranking is not None
+    assert ranking["entidade"] == "Frank Herbert"  # taxa vence, não volume
+    assert ranking["n_mencoes"] == 25
+    assert ranking["taxa_crua"] > 40
+
+
+def test_ranking_por_aspecto_exige_piso_da_entidade(con: duckdb.DuckDBPyConnection) -> None:
+    """Taxa de entidade com poucas menções é ruído: 3 de 3 daria 100% e lideraria tudo."""
+    _inserir_aspectos(con, "Dune", 100, "ritmo", "negativo", 3)
+
+    assert ranking_por_aspecto(con, "autor", "ritmo", "negativo") is None
+    assert ranking_por_aspecto(con, "autor", "ritmo", "negativo", piso_entidade=3) is not None
+
+
+def test_ranking_por_aspecto_exige_piso_do_aspecto(con: duckdb.DuckDBPyConnection) -> None:
+    _inserir_aspectos(con, "Dune", 100, "ritmo", "negativo", 2)
+    _inserir_aspectos(con, "Dune", 300, "enredo", "positivo", 60)
+
+    assert ranking_por_aspecto(con, "autor", "ritmo", "negativo", piso_aspecto=3) is None
+    assert ranking_por_aspecto(con, "autor", "ritmo", "negativo", piso_aspecto=2) is not None
+
+
+def test_ranking_por_aspecto_para_genero_via_unnest(con: duckdb.DuckDBPyConnection) -> None:
+    _inserir_aspectos(con, "Dune", 100, "ritmo", "negativo", 20)  # Dune é categoria Ficção
+    _inserir_aspectos(con, "Dune", 300, "enredo", "positivo", 40)
+
+    ranking = ranking_por_aspecto(con, "genero", "ritmo", "negativo")
+
+    assert ranking is not None
+    assert ranking["entidade"] == "Ficção"
+
+
+def test_ranking_por_aspecto_sem_review_enriched_devolve_none() -> None:
+    con = duckdb.connect(":memory:")
+    assert ranking_por_aspecto(con, "autor", "ritmo", "negativo") is None
+
+
+def test_divergencia_nota_sentimento_conta_os_dois_sentidos(
+    con: duckdb.DuckDBPyConnection,
+) -> None:
+    """H5: nota alta com texto negativo, e nota baixa com texto positivo."""
+    # nota 5, dois aspectos negativos contra um positivo -> contradiz a nota
+    con.execute(
+        "INSERT INTO enrichment_sample VALUES (10, 'Dune', 5.0, TIMESTAMP '2015-01-01',"
+        " 'otimo', 'texto', 'h1')"
+    )
+    con.execute(
+        "INSERT INTO review_enriched VALUES ('10', ["
+        "{'aspect':'ritmo','sentiment':'negativo','evidence':'a'},"
+        "{'aspect':'final','sentiment':'negativo','evidence':'b'},"
+        "{'aspect':'enredo','sentiment':'positivo','evidence':'c'}], false)"
+    )
+    # nota 1, texto majoritariamente positivo -> contradiz no sentido inverso
+    con.execute(
+        "INSERT INTO enrichment_sample VALUES (11, 'Dune', 1.0, TIMESTAMP '2015-01-01',"
+        " 'ruim', 'texto', 'h1')"
+    )
+    con.execute(
+        "INSERT INTO review_enriched VALUES ('11', ["
+        "{'aspect':'escrita','sentiment':'positivo','evidence':'d'},"
+        "{'aspect':'enredo','sentiment':'positivo','evidence':'e'}], false)"
+    )
+
+    r = divergencia_nota_sentimento(con)
+
+    assert r is not None
+    assert r["nota_alta_texto_negativo"] == 1
+    assert r["nota_baixa_texto_positivo"] == 1
+    # os dois denominadores existem e são diferentes — é o ponto da função
+    assert r["pct_da_nota_alta"] > r["pct_do_total_alta"]
+
+
+def test_divergencia_nota_sentimento_sem_review_enriched_devolve_none() -> None:
+    assert divergencia_nota_sentimento(duckdb.connect(":memory:")) is None
+
+
 def test_ranking_por_bayesiana_difere_de_media_simples(con: duckdb.DuckDBPyConnection) -> None:
     """Tolkien tem nota_media 1,0 mas bayesiana 3,5 — a ordenação tem que mudar."""
     por_media = [linha["author"] for linha in ranking_de_autores(con, "media")]
@@ -114,7 +226,7 @@ def test_candidatos_preferem_quem_escreve_mais(con: duckdb.DuckDBPyConnection) -
     """h1 escreve 800 caracteres e fica no meio da escala; h2 dá nota 5 e escreve 100."""
     candidatos: list[dict[str, Any]] = candidatos_a_entrevista(con)
 
-    assert candidatos[0]["user_hash"] == "h1"
+    assert candidatos[0]["prefixo"] == "h1"
 
 
 def test_candidato_por_prefixo_encontra_pelo_prefixo(con: duckdb.DuckDBPyConnection) -> None:
