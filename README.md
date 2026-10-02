@@ -69,14 +69,6 @@ por conferência automática.** Toda citação é checada contra o `review_id` q
 número da prosa é comparado com os dados que foram enviados — se não bate, a resposta é corrigida
 ou descartada em favor do texto determinístico.
 
-## Apresentação
-
-🔗 [Slides do projeto](https://claude.ai/artifact/7TZpfeau7EJLk8oR1qex4E) — roadmap, hipóteses da
-EDA, a ferramenta em ação e a fórmula de impacto com as premissas de negócio explícitas (spec 08).
-
-> O link é privado por padrão (artifact do Claude). Para compartilhar fora da sua conta, abra o
-> menu de compartilhamento da própria página.
-
 ---
 
 # 🗂️ Documentação do projeto
