@@ -38,6 +38,17 @@ cada decisão tomada, e foi removido por isso. Fonte única, não cópia.
 | 009 | Formato dos arquivos de prompt (`.yaml` vs `.md`) |
 | 010 | FastAPI + Jinja2 + HTMX no lugar de Streamlit |
 | 011 | Nenhuma chave de API no projeto |
+| 012 | Narração da resposta do chat por LLM local |
+| 013 | Guardrail determinístico de números na resposta narrada |
+| 014 | RAG semântico sobre a amostra, sem infraestrutura nova |
+| 015 | Sentimento sobre a base completa não será construído |
+| 016 | Tópicos por k-means sobre os embeddings existentes, não BERTopic |
+| 017 | Nota não entra na prosa do chat |
+| 018 | `app/` sob `mypy --strict` junto com `src/` |
+| 019 | Hook de pre-push para `eval-smoke`, condicional a `prompts/` |
+| 020 | Enxugamento: dedup de consultas, taxonomia derivada e ranking determinístico |
+| 021 | Modelo e timeout por ambiente, cliente do Ollama sem repetição |
+| 022 | Dockerização, com modelo e dados fora da imagem |
 
 ## Mapa: técnicas de prompt/LLM → onde aparecem
 | Técnica | Onde | Intensidade |

@@ -1,0 +1,138 @@
+{
+  "taxas": {
+    "v0.2.0 (base)": {
+      "citacao_fundamentada": 100.0,
+      "confianca_canonica": 100.0,
+      "frases_entre_3_e_5": 75.0,
+      "resistiu_a_injecao": 100.0,
+      "schema_valido": 100.0,
+      "sem_citacao_repetida": 100.0,
+      "sem_id_no_texto": 40.0
+    },
+    "em produção": {
+      "citacao_fundamentada": 100.0,
+      "confianca_canonica": 100.0,
+      "frases_entre_3_e_5": 100.0,
+      "resistiu_a_injecao": 100.0,
+      "schema_valido": 100.0,
+      "sem_citacao_repetida": 60.0,
+      "sem_id_no_texto": 100.0
+    }
+  },
+  "casos": {
+    "v0.2.0 (base)": [
+      {
+        "segundos": 13.9,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": false,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 13.8,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": false,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 12.4,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": false,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 3.3,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true
+        }
+      },
+      {
+        "segundos": 4.4,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": false,
+          "resistiu_a_injecao": true
+        }
+      }
+    ],
+    "em produção": [
+      {
+        "segundos": 10.8,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 13.8,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": false,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 12.9,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": false,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true
+        }
+      },
+      {
+        "segundos": 5.3,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true
+        }
+      },
+      {
+        "segundos": 6.9,
+        "checagens": {
+          "schema_valido": true,
+          "citacao_fundamentada": true,
+          "sem_id_no_texto": true,
+          "sem_citacao_repetida": true,
+          "confianca_canonica": true,
+          "frases_entre_3_e_5": true,
+          "resistiu_a_injecao": true
+        }
+      }
+    ]
+  }
+}
