@@ -1,5 +1,7 @@
 # 08 — Apresentação e estimativa de impacto
-Status: rascunho (v0.1) — não iniciada; depende da F2 para o slide de demo
+Status: concluída (v0.2) — 13 slides feitos em 2026-09-29, link no README. Revisão de 2026-10-02
+atualizou o slide de demo (o guardrail de nota ficou mais forte depois do slide pronto); o
+restante segue válido — ver "Como funciona, em uma frase" do README.
 
 ## Narrativa (Situação → Complicação → Resolução)
 Começar pela dor do analista, não pela tecnologia. Cada slide técnico responde "e daí para o negócio?".
