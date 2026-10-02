@@ -22,28 +22,21 @@ Uso:
 
 import argparse
 import csv
-import unicodedata
 from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import duckdb
 
 from bri.data.process import BANCO
+from bri.schemas.aspectos import Aspecto, Sentimento
+from bri.texto import sem_acento
 
-ASPECTOS = [
-    "enredo",
-    "personagens",
-    "ritmo",
-    "final",
-    "escrita",
-    "tradução",
-    "edição_física",
-    "preço",
-    "outro",
-]
-SENTIMENTOS = ["positivo", "negativo", "neutro", "misto"]
+# Derivados do schema, não copiados: aspectos.py se declara a fonte única das categorias, e uma
+# segunda lista à mão aqui compararia contra a taxonomia velha em silêncio se ela mudar.
+ASPECTOS = list(get_args(Aspecto))
+SENTIMENTOS = list(get_args(Sentimento))
 SEED = 42  # mesma do gerar_golden_aspectos.py: reconstrói qual metade foi dirigida a ritmo
 N_DIRIGIDO = 100
 
@@ -58,8 +51,7 @@ Rotulos = dict[str, dict[str, str]]
 _CANONICO = {}
 for _rotulo in [*ASPECTOS, *SENTIMENTOS]:
     _CANONICO[_rotulo] = _rotulo
-    _sem_acento = unicodedata.normalize("NFKD", _rotulo).encode("ascii", "ignore").decode()
-    _CANONICO[_sem_acento] = _rotulo
+    _CANONICO[sem_acento(_rotulo)] = _rotulo
 
 
 def _normalizar(valor: str) -> str:
@@ -314,41 +306,25 @@ def dump_discordancias(
     return len(linhas)
 
 
-def relatorio(
-    con: duckdb.DuckDBPyConnection,
-    caminho_gabarito: Path,
-    gabarito: Rotulos,
-    predito: Rotulos,
-    repeticoes: dict[str, Counter[str]],
-    anomalias_gabarito: list[dict[str, str]],
-    caminho_dump: Path,
-    n_dump: int,
-) -> str:
-    ids = list(gabarito)
-    dirigidos = dirigidos_a_ritmo(con)
-    metade_dirigida = [i for i in ids if i in dirigidos]
-    metade_aleatoria = [i for i in ids if i not in dirigidos]
-
-    todos = contar(gabarito, predito, ids)
-    aleatoria = contar(gabarito, predito, metade_aleatoria)
-    dirigida = contar(gabarito, predito, metade_dirigida)
-
-    linhas: list[str] = [
+def _cabecalho(caminho_gabarito: Path, n_linhas: int) -> list[str]:
+    return [
         "# Gabarito de aspectos vs extração da IA",
         "",
         f"- gabarito: `{caminho_gabarito}`",
         "- predição: tabela `review_enriched` do DuckDB",
-        f"- linhas comparadas: **{len(ids)}**",
+        f"- linhas comparadas: **{n_linhas}**",
         f"- gerado em {date.today().isoformat()}",
         "",
     ]
 
+
+def _secao_visao_geral(todos: dict[str, Any], n_linhas: int) -> list[str]:
     (mp, mr, mf), macro = micro_macro(todos["deteccao"])
     (ep, er, ef), macro_e = micro_macro(todos["estrito"])
-    linhas += [
+    return [
         "## 1. Visão geral (todas as linhas)",
         "",
-        f"- conjunto idêntico: **{todos['exatas']}/{len(ids)}** ({todos['exatas'] / len(ids):.1%})",
+        f"- conjunto idêntico: **{todos['exatas']}/{n_linhas}** ({todos['exatas'] / n_linhas:.1%})",
         f"- detecção: micro P {mp:.3f} / R {mr:.3f} / **F1 {mf:.3f}** | macro F1 {macro:.3f}",
         f"- par estrito: micro P {ep:.3f} / R {er:.3f} / **F1 {ef:.3f}** | macro F1 {macro_e:.3f}",
         "",
@@ -357,9 +333,17 @@ def relatorio(
         "",
     ]
 
+
+def _secao_metades(
+    aleatoria: dict[str, Any],
+    dirigida: dict[str, Any],
+    n_aleatoria: int,
+    n_dirigida: int,
+) -> list[str]:
+    """A metade dirigida a `ritmo` acerta por construção; só a aleatória estima o corpus."""
     (ap_, ar, af), _ = micro_macro(aleatoria["deteccao"])
     (dp_, dr, df_), _ = micro_macro(dirigida["deteccao"])
-    linhas += [
+    return [
         "## 2. Metade aleatória vs metade dirigida",
         "",
         tabela_md(
@@ -367,19 +351,19 @@ def relatorio(
             [
                 [
                     "aleatória (estima o corpus)",
-                    len(metade_aleatoria),
+                    n_aleatoria,
                     f"{ap_:.3f}",
                     f"{ar:.3f}",
                     f"**{af:.3f}**",
-                    f"{aleatoria['exatas']}/{len(metade_aleatoria)}",
+                    f"{aleatoria['exatas']}/{n_aleatoria}",
                 ],
                 [
                     "dirigida a `ritmo` (enviesada)",
-                    len(metade_dirigida),
+                    n_dirigida,
                     f"{dp_:.3f}",
                     f"{dr:.3f}",
                     f"{df_:.3f}",
-                    f"{dirigida['exatas']}/{len(metade_dirigida)}",
+                    f"{dirigida['exatas']}/{n_dirigida}",
                 ],
             ],
         ),
@@ -393,13 +377,15 @@ def relatorio(
         "",
     ]
 
+
+def _secao_sentimento(todos: dict[str, Any]) -> list[str]:
     pares_sent = todos["sentimentos"]
     acerto = sum(1 for g, p in pares_sent if g == p) / len(pares_sent) if pares_sent else 0.0
     com_misto = [(g, p) for g, p in pares_sent if g == "misto"]
     sem_misto = [(g, p) for g, p in pares_sent if g != "misto"]
     acerto_sem = sum(1 for g, p in sem_misto if g == p) / len(sem_misto) if sem_misto else 0.0
     acerto_com = sum(1 for g, p in com_misto if g == p) / len(com_misto) if com_misto else 0.0
-    linhas += [
+    secao = [
         "## 3. Sentimento (só aspectos que os dois detectaram)",
         "",
         f"n = {len(pares_sent)} | accuracy **{acerto:.3f}** | kappa de Cohen "
@@ -423,16 +409,22 @@ def relatorio(
         "",
     ]
     if com_misto and acerto_com < 0.2:
-        linhas += [
+        secao += [
             "> O eixo de sentimento só é fraco onde o gabarito pede `misto`. Fora disso a",
             "> concordância é alta — o defeito é o modelo colapsar ambivalência em positivo ou",
             "> negativo, não errar polaridade.",
             "",
         ]
+    return secao
 
+
+def _secao_anomalias_da_extracao(
+    repeticoes: dict[str, Counter[str]], predito: Rotulos, ids: list[str]
+) -> list[str]:
+    """Independe do gabarito: o que a extração fez de estranho por conta própria."""
     duplicados = {i: c for i, c in repeticoes.items() if any(n > 1 for n in c.values())}
     vazios = [i for i in ids if not predito.get(i)]
-    linhas += [
+    secao = [
         "## 4. Anomalias na extração (independem do gabarito)",
         "",
         f"- linhas em que a IA repetiu o mesmo aspecto: **{len(duplicados)}/{len(ids)}** "
@@ -451,14 +443,22 @@ def relatorio(
                     " ; ".join(sorted(f"{a}/{s}" for a, s in predito[review_id].items())),
                 ]
             )
-        linhas += [tabela_md(["review_id", "repetido", "extração completa"], exemplos), ""]
-        linhas += [
+        secao += [tabela_md(["review_id", "repetido", "extração completa"], exemplos), ""]
+        secao += [
             "Aspecto repetido com sentimentos opostos é ambivalência escrita como duas linhas —",
             "exatamente o caso que o rótulo `misto` existe para cobrir.",
             "",
         ]
+    return secao
 
-    linhas += ["## 5. Diagnóstico do gabarito", ""]
+
+def _secao_diagnostico_do_gabarito(
+    con: duckdb.DuckDBPyConnection, gabarito: Rotulos, ids: list[str]
+) -> list[str]:
+    """Compara a taxa de cada rótulo no gabarito com a taxa da IA no corpus inteiro.
+
+    É o que faz um gabarito-curinga aparecer como número em vez de suposição.
+    """
     taxa_corpus = dict(
         con.execute(
             """
@@ -485,7 +485,9 @@ def relatorio(
                 f"{pct_gab - pct_corpus:+.1f} pp",
             ]
         )
-    linhas += [
+    return [
+        "## 5. Diagnóstico do gabarito",
+        "",
         "Se o gabarito usa um rótulo muito acima da taxa da IA no corpus inteiro, ele pode estar",
         "servindo de curinga — e aí o F1 daquela categoria mede critério divergente, não erro.",
         "",
@@ -495,33 +497,40 @@ def relatorio(
         "",
     ]
 
-    if todos["confusoes"]:
-        linhas += [
-            "## 6. Confusões mais comuns (gabarito perdeu → IA pôs no lugar)",
-            "",
-            tabela_md(
-                ["gabarito", "IA", "n"],
-                [[g, p, n] for (g, p), n in todos["confusoes"].most_common(8)],
-            ),
-            "",
-        ]
 
-    linhas += ["## 7. Rótulos do gabarito fora do schema", ""]
-    if anomalias_gabarito:
-        por_problema = Counter(a["problema"].split(":")[0] for a in anomalias_gabarito)
-        linhas += [
-            f"**{len(anomalias_gabarito)}** rótulo(s) recusado(s) na leitura do CSV:",
-            "",
-            tabela_md(["problema", "n"], [[p, n] for p, n in por_problema.most_common()]),
-            "",
-            "Detalhe: "
-            + "; ".join(f"`{a['review_id']}` {a['problema']}" for a in anomalias_gabarito[:10]),
-            "",
-        ]
-    else:
-        linhas += ["Nenhum: todos os rótulos caem nas 9 categorias e nos 4 sentimentos.", ""]
+def _secao_confusoes(todos: dict[str, Any]) -> list[str]:
+    if not todos["confusoes"]:
+        return []
+    return [
+        "## 6. Confusões mais comuns (gabarito perdeu → IA pôs no lugar)",
+        "",
+        tabela_md(
+            ["gabarito", "IA", "n"],
+            [[g, p, n] for (g, p), n in todos["confusoes"].most_common(8)],
+        ),
+        "",
+    ]
 
-    linhas += [
+
+def _secao_rotulos_fora_do_schema(anomalias_gabarito: list[dict[str, str]]) -> list[str]:
+    secao = ["## 7. Rótulos do gabarito fora do schema", ""]
+    if not anomalias_gabarito:
+        return [*secao, "Nenhum: todos os rótulos caem nas 9 categorias e nos 4 sentimentos.", ""]
+    por_problema = Counter(a["problema"].split(":")[0] for a in anomalias_gabarito)
+    return [
+        *secao,
+        f"**{len(anomalias_gabarito)}** rótulo(s) recusado(s) na leitura do CSV:",
+        "",
+        tabela_md(["problema", "n"], [[p, n] for p, n in por_problema.most_common()]),
+        "",
+        "Detalhe: "
+        + "; ".join(f"`{a['review_id']}` {a['problema']}" for a in anomalias_gabarito[:10]),
+        "",
+    ]
+
+
+def _secao_adjudicacao(caminho_dump: Path, n_dump: int) -> list[str]:
+    return [
         "## 8. Material para adjudicação humana",
         "",
         f"As **{n_dump}** linhas em que gabarito e IA divergem estão em `{caminho_dump}`, com o",
@@ -529,7 +538,41 @@ def relatorio(
         "bem mais rápido que rotular em branco — caminho mais curto para um gabarito confiável.",
         "",
     ]
-    return "\n".join(linhas)
+
+
+def relatorio(
+    con: duckdb.DuckDBPyConnection,
+    caminho_gabarito: Path,
+    gabarito: Rotulos,
+    predito: Rotulos,
+    repeticoes: dict[str, Counter[str]],
+    anomalias_gabarito: list[dict[str, str]],
+    caminho_dump: Path,
+    n_dump: int,
+) -> str:
+    """Monta o relatório inteiro: cada seção é uma função, nesta ordem."""
+    ids = list(gabarito)
+    dirigidos = dirigidos_a_ritmo(con)
+    metade_dirigida = [i for i in ids if i in dirigidos]
+    metade_aleatoria = [i for i in ids if i not in dirigidos]
+
+    todos = contar(gabarito, predito, ids)
+    aleatoria = contar(gabarito, predito, metade_aleatoria)
+    dirigida = contar(gabarito, predito, metade_dirigida)
+
+    return "\n".join(
+        [
+            *_cabecalho(caminho_gabarito, len(ids)),
+            *_secao_visao_geral(todos, len(ids)),
+            *_secao_metades(aleatoria, dirigida, len(metade_aleatoria), len(metade_dirigida)),
+            *_secao_sentimento(todos),
+            *_secao_anomalias_da_extracao(repeticoes, predito, ids),
+            *_secao_diagnostico_do_gabarito(con, gabarito, ids),
+            *_secao_confusoes(todos),
+            *_secao_rotulos_fora_do_schema(anomalias_gabarito),
+            *_secao_adjudicacao(caminho_dump, n_dump),
+        ]
+    )
 
 
 def main() -> None:

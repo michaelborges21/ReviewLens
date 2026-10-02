@@ -1,0 +1,18 @@
+# Entrega a GPU NVIDIA ao Ollama. Arquivo separado porque o compose principal precisa subir em
+# máquina sem placa nenhuma: exigir o dispositivo lá faria `up` falhar em quem não tem GPU.
+#
+# Use junto com o principal:
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Exige o pacote `nvidia-container-toolkit` instalado no host (ver README). Sem ele o Docker não
+# sabe entregar a placa e o `up` falha dizendo que não encontrou o driver `nvidia`.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

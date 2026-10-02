@@ -1,0 +1,68 @@
+# Três serviços, nesta ordem: o Ollama sobe, os modelos são baixados, o app começa a servir.
+#
+# Este arquivo roda em QUALQUER máquina, inclusive sem placa NVIDIA — nele o modelo usa CPU.
+# Com GPU, acrescente o segundo arquivo (muito mais rápido, ver README):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    # 11436 no host para não colidir com outra instalação de Ollama já ocupando 11434/11435.
+    ports:
+      - "${OLLAMA_PORTA_HOST:-11436}:11434"
+    volumes:
+      # Volume nomeado: os ~8,8GB de modelo sobrevivem a `docker compose down` e não são
+      # baixados de novo. Para apagá-los de verdade é preciso `down -v`, explicitamente.
+      - modelos_ollama:/root/.ollama
+    healthcheck:
+      # A imagem não tem curl; o próprio cliente do Ollama serve de sonda.
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  baixar-modelos:
+    build: .
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODELO=${OLLAMA_MODELO:-gemma4:12b}
+      - OLLAMA_MODELO_EMBEDDING=${OLLAMA_MODELO_EMBEDDING:-embeddinggemma}
+    # Roda uma vez e termina. Já baixado, sai em segundos sem tocar a rede.
+    command: ["python", "-m", "bri.llm.baixar_modelos"]
+    restart: "no"
+
+  app:
+    build: .
+    depends_on:
+      baixar-modelos:
+        # Só serve depois que o modelo existe — sem isso o chat subiria degradado, calado.
+        condition: service_completed_successfully
+    ports:
+      - "${APP_PORTA_HOST:-8000}:8000"
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_MODELO=${OLLAMA_MODELO:-gemma4:12b}
+      - OLLAMA_MODELO_EMBEDDING=${OLLAMA_MODELO_EMBEDDING:-embeddinggemma}
+      # Em CPU o modelo é ordens de magnitude mais lento que em GPU; sem folga aqui toda
+      # resposta do chat cairia no texto determinístico por estouro de tempo.
+      - TIMEOUT_CHAT_SEGUNDOS=${TIMEOUT_CHAT_SEGUNDOS:-600}
+      - USER_ID_HASH_SALT=${USER_ID_HASH_SALT:-}
+    volumes:
+      # Dado mora no host, não na imagem: os CSVs que você baixa do Drive e o banco que
+      # `make data` constrói a partir deles.
+      - ./data:/app/data
+      - ./reports:/app/reports
+    # No Linux `host.docker.internal` não existe por padrão (verificado: não resolve). Esta linha
+    # cria o nome, para quem já tem um Ollama na máquina e quer usá-lo em vez do container:
+    #   OLLAMA_URL=http://host.docker.internal:11434 docker compose up -d app --no-deps
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+volumes:
+  modelos_ollama:

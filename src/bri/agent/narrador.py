@@ -1,6 +1,7 @@
 """Pede ao LLM local que redija em prosa o que o roteador já apurou por SQL (spec 04)."""
 
 import json
+import os
 from typing import Any
 
 from pydantic import ValidationError
@@ -11,8 +12,10 @@ from bri.guardrails.numeros import numeros_invalidos
 from bri.llm import ollama, prompts
 from bri.schemas.qa import RespostaNarrada
 
-# o padrão de 300s de gerar_json serve ao batch noturno, não a uma requisição de navegador
-TIMEOUT_CHAT = 60
+# o padrão de 300s de gerar_json serve ao batch noturno, não a uma requisição de navegador.
+# Por ambiente porque o número só vale para esta máquina: 60s cobre a GPU medida aqui, e o mesmo
+# modelo em CPU leva ordens de magnitude mais — sem a variável, degradaria toda resposta.
+TIMEOUT_CHAT = int(os.environ.get("TIMEOUT_CHAT_SEGUNDOS", "60"))
 MAX_TENTATIVAS = 2
 MAX_CITACOES = 5
 MAX_LINHAS_NUMEROS = 10

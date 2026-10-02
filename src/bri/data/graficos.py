@@ -1,8 +1,8 @@
 """Gráficos embutidos nas respostas do chat — mesmo matplotlib da EDA (spec 01), mesmo backend
 Agg, sem dependência nova. PNG em base64: sem rota, sem arquivo estático, cabe na resposta HTMX.
 
-Padrões reaproveitados dos notebooks exploratórios (notebooks/02_eda_books_rating.ipynb,
-04_solucao.ipynb): linha de nota ao longo do tempo e histograma de distribuição de notas.
+Padrões reaproveitados da EDA exploratória (notebooks fora do git): linha de nota ao longo do
+tempo e histograma de distribuição de notas.
 """
 
 import base64

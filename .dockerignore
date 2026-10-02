@@ -1,0 +1,28 @@
+# Sem este arquivo o contexto de build é 7,3GB (medido) — data/ sozinho é praticamente tudo.
+# Dado não entra em imagem: os CSVs vêm do Drive para data/raw/ no host, e o compose monta a pasta.
+data/
+reports/
+notebooks/
+docs/
+
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+
+.env
+.env.*
+!.env.example
+.claude/
+ETAPAS_PROCESSO.md
+
+# A imagem instala sem as dependências de dev, então pytest/ruff/mypy não existem nela e `tests/`
+# não teria como rodar — `make check` é no host ou no CI. `evals/` fica, porque `make eval-smoke` e
+# `make red-team` só precisam do que já está instalado e são úteis de rodar dentro do container.
+tests/
+specs/

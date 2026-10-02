@@ -872,3 +872,136 @@ Alternativa descartada: script próprio de diff contra o upstream (`git diff @{p
 o pre-commit já resolve isso nativamente para hooks de `pre-push`; escrever de novo seria
 duplicar código para o mesmo resultado.
 
+### ADR-020 — Enxugamento: dedup de consultas, taxonomia derivada e ranking determinístico
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/01-data-eda.md`, `specs/06-evals.md`
+Contexto: varredura completa do repositório procurando código redundante, parte descartável e
+diretório desnecessário. O resultado foi menos do que se temia em estrutura e mais do que se
+esperava em correção.
+Decisão, em quatro frentes:
+- **`aspectos_do_autor` / `aspectos_do_genero`**: eram ~50 linhas cada, com a CTE de agregação de
+  25 linhas byte a byte idêntica. A única diferença real é como a avaliação chega até a entidade
+  (tabela de ligação para autor, lista de categorias para gênero). Virou `_aspectos_da_entidade`
+  mais `_LigacaoComEntidade`, com as duas funções públicas preservadas como fachada de uma linha.
+  Os fragmentos interpolados são literais do módulo; o valor buscado segue parametrizado por `?`.
+- **Taxonomia de aspectos**: `evals/comparar_aspectos.py` copiava à mão as 9 categorias e os 4
+  sentimentos que `schemas/aspectos.py` declara ser "fonte única". Agora derivam por `get_args`
+  do próprio `Literal` — a cópia compararia contra a taxonomia velha em silêncio quando a v2
+  chegar. O mesmo arquivo reimplementava `bri.texto.sem_acento` com NFKD; passou a importá-la.
+- **Código morto removido**: `tests/conftest.py` (0 bytes) e a constante `ROTULO_MISTURADO`,
+  nunca referenciada — o porquê dela já vive em `prompts/rotular_topico.md`. `.gitignore` ganhou
+  `.mypy_cache/`, `.ruff_cache/`, `.pytest_cache/` (24MB que só não apareciam por ignore global
+  desta máquina, e apareceriam no clone de outra pessoa). A referência a `specs/_archive/` saiu do
+  AGENTS.md: o diretório não existe mais.
+- **Correção de bug achada na varredura — ranking não determinístico.** Seis `ORDER BY` não tinham
+  critério de desempate, e o DuckDB devolve ordem arbitrária entre empatados. Medido:
+  `aspectos_do_autor("Frank Herbert")` (três aspectos empatados em 7 menções) deu **7 ordens
+  distintas em 8 chamadas** — a página do autor reembaralhava a cada recarga. Pior nos rankings com
+  `LIMIT`: o empate trocava *quais* linhas apareciam, inclusive em `candidatos_a_entrevista`, que
+  alimenta export com aprovação humana, e em `ranking_por_aspecto`, cujo `LIMIT 1` elegia um
+  vencedor arbitrário. Contraria a exigência de número reproduzível da AGENTS.md §7. Todos passaram
+  a desempatar por coluna única — que já era a prática do projeto em `citacoes_da_entidade`
+  (`ORDER BY ... , review_id`), então era esquecimento, não escolha.
+**Medido depois:** 234 testes verdes (2 novos, e ambos falham se o desempate for removido); as 5
+consultas antes instáveis dão 1 ordem única em 8 chamadas contra o banco real; a saída de
+`comparar_aspectos.py` é byte a byte idêntica à anterior; `aspectos_do_autor/genero` devolvem o
+mesmo resultado da versão antiga em 8 entidades reais (a única divergência era a própria ordem
+instável, confirmada comparando a versão antiga consigo mesma); as 11 rotas respondem 200 contra o
+banco real.
+**Analisado e deliberadamente não mexido**, para o próximo leitor não refazer o trabalho:
+- as fixtures de teste parecem duplicadas (`reviews` criada em 8 arquivos), mas o conteúdo difere
+  de propósito — `test_rotas.py` injeta payload de ataque via parâmetro. Centralizar acoplaria os
+  testes e esconderia o dado no ponto de uso;
+- `graficos._para_data_uri` e `nuvem.gerar_nuvem` recebem tipos diferentes (`Figure` contra imagem
+  PIL); só o prefixo do data URI repete, uma linha;
+- `ranking_de_autores`/`de_generos` e `performance_do_*` leem tabelas e colunas diferentes: são
+  consultas distintas, não duplicação;
+- toda dependência declarada é usada de fato — `pyarrow` entra por `.arrow()` no k-means dos
+  tópicos, `jinja2`/`python-multipart`/`uvicorn`/`httpx` entram por via indireta;
+- nenhum diretório sobrando: a estrutura bate com a AGENTS.md §6, e `docs/` e `reports/exports/`
+  (que tem hash de leitor real) já estão fora do git.
+Pendências levantadas e **não** resolvidas, por serem decisão do Michael: `relatorio()` em
+`comparar_aspectos.py` tem 217 linhas numa função só e zero cobertura de teste (refatorar sem rede
+é risco sem ganho funcional); `notebooks/` versiona 7MB com saída embutida; `make eval` existe só
+para falhar; e `comparar_aspectos.py`/`gerar_golden_aspectos.py` não têm alvo no Makefile.
+
+### ADR-021 — Modelo e timeout por ambiente, cliente do Ollama sem repetição, relatório fatiado
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/06-evals.md`, `specs/09-workflow-ci.md`
+Contexto: segunda rodada do enxugamento (ADR-020), agora nas pendências que ela deixou e no que
+estava cravado no código sem poder ser ajustado.
+Decisão:
+- **Modelo por variável de ambiente.** `OLLAMA_URL` já era configurável, mas `MODELO_PADRAO` e
+  `EMBEDDING_MODELO_PADRAO` eram literais — incoerência que apareceu na tentativa de dockerização,
+  quando o manual sugeria trocar de modelo e o código não deixava. Agora `OLLAMA_MODELO` e
+  `OLLAMA_MODELO_EMBEDDING`, com os padrões da ADR-004 intactos. Serve a máquina sem GPU e a
+  repetição da medição com outro modelo, sem editar código.
+- **`TIMEOUT_CHAT` por ambiente** (`TIMEOUT_CHAT_SEGUNDOS`, padrão 60). O número só vale para a GPU
+  medida aqui; o mesmo modelo em CPU leva ordens de magnitude mais, e sem a variável toda resposta
+  do chat degradaria para o texto determinístico por estouro de tempo.
+- **Redundância no cliente do Ollama.** `gerar_json` e `embedding` repetiam as quatro linhas de
+  montagem da requisição HTTP; viraram `_pedir(rota, corpo, timeout)`.
+- **`relatorio()` fatiada.** Eram 218 linhas numa função só, com oito seções numeradas construídas
+  em sequência. Virou uma função por seção (`_secao_visao_geral`, `_secao_metades`, …) e um
+  `relatorio()` que só concatena. Não havia lógica duplicada ali — o ganho é de leitura, não de
+  linhas: o arquivo cresceu um pouco e nenhuma seção passa de ~45 linhas.
+- **Alvos no Makefile** para `comparar_aspectos` (com `GABARITO=` e `SAIDA=`) e
+  `gerar_golden_aspectos`, que antes só rodavam pelo comando escrito na docstring.
+**Teste onde não havia nenhum:** `tests/test_comparar_aspectos.py`, 14 casos sobre as funções puras
+de métrica (`prf`, `micro_macro`, `kappa_cohen`, `contar`, `tabela_md`, `_normalizar`), escritos
+contra valores conferidos à mão, não contra a saída atual do código. O script produz os números que
+a apresentação cita e rodava sem teste desde que foi escrito — uma métrica errada passaria como
+resultado ruim do modelo, não como bug. Todos passaram de primeira: a matemática estava correta, e
+agora está protegida. Foi essa cobertura que permitiu fatiar `relatorio()` com segurança.
+**Medido depois:** 248 testes verdes; saída de `comparar_aspectos.py` byte a byte idêntica à de
+antes do fatiamento (rodei as duas versões e diffei); `embedding` e `gerar_json` reais funcionando
+após o refactor do HTTP (768 dimensões, JSON no schema); as 11 rotas em 200 e um chat real com
+gráfico contra o banco real; red-team **26/26 (100%)** nas cinco famílias.
+Pendências que seguem abertas, por serem decisão do Michael: `notebooks/` versiona 7MB com saída
+embutida, e `make eval` existe só para falhar com "ainda não implementado" — mantido assim de
+propósito, porque falhar alto é melhor que fingir sucesso, mas a spec 06 ainda não tem a suíte que
+ele promete.
+
+### ADR-022 — Dockerização, com modelo e dados fora da imagem
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/09-workflow-ci.md` · Reverte o `6e8469a`
+Contexto: a primeira tentativa (`ae20d40`) foi removida no `6e8469a` por três defeitos medidos: o
+container do Ollama **não recebia a GPU** (gemma4:12b em CPU, inutilizável), o contexto de build era
+de **7,3GB** sem `.dockerignore`, e a promessa de "funciona em máquina nova" quebrava (`Cannot open
+database`, porque imagem nenhuma podia conter o banco). O Michael propôs outro desenho: dockerizar
+tudo **menos** o modelo de IA e os CSVs, com script que baixa os modelos, e os CSVs distribuídos por
+Google Drive. Esse desenho corrige os três.
+Decisão:
+- **`.dockerignore`** — a peça que faltava. Contexto de build de **7,3GB → 2,1MB** (medido).
+- **Imagem só da aplicação**, 1,1GB (matplotlib, polars, duckdb e pyarrow pesam; a estimativa
+  inicial de ~400MB estava errada). `UV_NO_SYNC=1` para os alvos do Makefile rodarem dentro do
+  container sem tentar re-sincronizar, o que exigiria rede em tempo de execução.
+- **Modelo fora da imagem**, num volume nomeado, baixado pelo serviço one-shot `baixar-modelos`.
+  `src/bri/llm/baixar_modelos.py` lê os nomes de `ollama.py` (ADR-021) em vez de manter lista
+  própria: com o modelo configurável por ambiente, uma segunda lista baixaria o modelo errado.
+  Idempotente — são ~8,8GB e o compose chama isto em todo `up`.
+- **Dados fora da imagem**: `./data` e `./reports` montados do host. Os CSVs vêm do Drive.
+- **GPU em arquivo separado** (`docker-compose.gpu.yml`). O compose base sobe em máquina sem placa
+  nenhuma; exigir o dispositivo nele faria `up` falhar em quem não tem GPU, o oposto do objetivo.
+- **`extra_hosts: host.docker.internal:host-gateway`** no serviço `app`. Escrevi no README o atalho
+  para quem já tem Ollama na máquina, fui verificar e **o nome não resolve no Linux** — a instrução
+  estava errada. Em vez de mandar o leitor descobrir o IP da bridge, o compose cria o nome.
+- **README reescrito** como tutorial para quem nunca usou Docker: diagrama do que fica dentro e
+  fora, `nvidia-container-toolkit` como pré-requisito destacado (é o passo mais esquecido: sem ele o
+  modelo cai para CPU **sem avisar**), tabela de VRAM medida, log esperado do primeiro `up`, tabela
+  de sintoma→causa→solução. O README anterior ainda dizia "Fase F0" e mentia sobre o estado.
+**VRAM medida nesta máquina** (RTX 3060 12GB), o número que decide se dá para rodar: baseline
+0,6GB; `gemma4:12b` carregado 8,7GB (o modelo ocupa ~8,1GB, 100% em GPU, contexto 4096); com
+`embeddinggemma` junto 9,5GB (~0,7GB a mais). O projeto usa os dois ao mesmo tempo na tela de
+perguntas, então **o pico real é ~9,5GB** — 12GB passa com folga, 8GB não cabe.
+**Medido depois:** GPU **chega ao container** (`nvidia-smi` dentro do serviço mostra a RTX 3060 —
+exatamente o que falhava antes); a pilha sobe na ordem certa (ollama saudável → baixar-modelos
+conclui → app serve); download real dentro do container com progresso visível em volume limpo; as 7
+telas em 200 servidas pelo container; chat real atravessando app → ollama → modelo com gráfico; o
+atalho para o Ollama do host funciona (resolve `172.17.0.1`, responde com narração); 256 testes
+verdes, 8 deles novos cobrindo o download sem tocar a rede. O container do Ollama de outros projetos
+(`roadmap-backend-ollama-1`) ficou intacto durante todos os testes, e a máquina foi devolvida sem
+container nem volume do projeto.
+Consequências:
++ quem clonar precisa de Docker e dos CSVs, nada mais — nem Python, nem uv, nem Ollama
++ `make docker-data` constrói o banco sem Python no host
+− **Docker não resolve o pipeline de dados**: `make data` é obrigatório, e o enriquecimento por LLM
+  leva horas na base inteira. O README documenta `LIMITE=200` para quem só quer ver funcionando.
+− imagem de 1,1GB é maior que o ideal; enxugar exigiria abrir mão de matplotlib ou wordcloud

@@ -1,7 +1,7 @@
 """Consultas somente-leitura sobre a camada processed — o que as telas e a API leem."""
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import duckdb
 
@@ -22,6 +22,12 @@ PISO_MENCOES_ENTIDADE = PRIOR_ENCOLHIMENTO
 def conectar(caminho: Path = BANCO) -> duckdb.DuckDBPyConnection:
     """A interface nunca escreve no banco — abrir read-only torna isso impossível, não opcional."""
     return duckdb.connect(str(caminho), read_only=True)
+
+
+# Todo ranking daqui desempata por uma coluna única. Sem isso o DuckDB devolve ordem arbitrária
+# entre empatados: `aspectos_do_autor("Frank Herbert")` deu 7 ordens distintas em 8 chamadas, e nos
+# rankings com LIMIT o empate trocava *quais* linhas apareciam — o que contraria a exigência de
+# número reproduzível da AGENTS.md §7.
 
 
 def _linhas(
@@ -45,7 +51,7 @@ def ranking_de_autores(
         f"""
         SELECT author, n_livros, n_reviews, nota_media, nota_bayesiana
         FROM author_stats WHERE n_reviews > 0
-        ORDER BY {colunas[ordenar_por]} DESC LIMIT ?
+        ORDER BY {colunas[ordenar_por]} DESC, author LIMIT ?
         """,
         [limite],
     )
@@ -72,7 +78,7 @@ def performance_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str
         FROM book_authors ba
         LEFT JOIN reviews r ON r.title = ba.title
         WHERE ba.author = ?
-        GROUP BY 1 ORDER BY n_reviews DESC LIMIT 20
+        GROUP BY 1 ORDER BY n_reviews DESC, ba.title LIMIT 20
         """,
         [autor],
     )
@@ -116,7 +122,7 @@ def ranking_de_generos(
         con,
         """
         SELECT categoria, n_livros, n_reviews, nota_media, comprimento_mediano
-        FROM genre_stats ORDER BY n_reviews DESC LIMIT ?
+        FROM genre_stats ORDER BY n_reviews DESC, categoria LIMIT ?
         """,
         [limite],
     )
@@ -204,7 +210,7 @@ def candidatos_a_entrevista(
                (ln(n_reviews + 1) * comprimento_mediano) / (1 + abs(nota_media - 3.0)) AS score
         FROM users_agg
         WHERE n_reviews >= 3 AND comprimento_mediano IS NOT NULL
-        ORDER BY score DESC LIMIT ?
+        ORDER BY score DESC, prefixo LIMIT ?
         """,
         [limite],
     )
@@ -279,7 +285,7 @@ def ranking_por_aspecto(
         JOIN mencoes_da_entidade ent ON ent.entidade = alvo.entidade
         CROSS JOIN taxa_global
         WHERE alvo.n_mencoes >= ? AND ent.mencoes_totais >= ?
-        ORDER BY taxa_encolhida DESC LIMIT 1
+        ORDER BY taxa_encolhida DESC, alvo.entidade LIMIT 1
     """
     linhas = _linhas(
         con, sql, [aspecto, sentimento, aspecto, sentimento, piso_aspecto, piso_entidade]
@@ -400,30 +406,50 @@ def _tabela_existe(con: duckdb.DuckDBPyConnection, nome: str) -> bool:
     )
 
 
-def aspectos_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str, Any]:
-    """Agrega review_enriched por autor via enrichment_sample -> book_authors.
+class _LigacaoComEntidade(NamedTuple):
+    """Como a avaliação chega até a entidade — a única diferença entre aspectos de autor e de
+    gênero. Autor passa pela tabela de ligação; gênero lê a lista de categorias do próprio livro.
+
+    `juncao` e `filtro` são literais do módulo, nunca entrada de usuário: o valor buscado continua
+    parametrizado por `?`, como em todas as outras consultas daqui.
+    """
+
+    juncao: str  # com {titulo} para a coluna de título do lado esquerdo da junção
+    filtro: str
+
+
+_POR_AUTOR = _LigacaoComEntidade("JOIN book_authors ba ON ba.title = {titulo}", "ba.author = ?")
+_POR_GENERO = _LigacaoComEntidade(
+    "JOIN books b ON b.title = {titulo}", "list_contains(b.categories, ?)"
+)
+
+
+def _aspectos_da_entidade(
+    con: duckdb.DuckDBPyConnection, ligacao: _LigacaoComEntidade, valor: str
+) -> dict[str, Any]:
+    """Agrega review_enriched por entidade, via enrichment_sample.
 
     É amostra de 19.949 avaliações, não a base inteira. Sem `review_enriched` carregada, devolve
     zero aspectos em vez de quebrar a página — mesmo comportamento de antes do enriquecimento.
     """
     totais = _linhas(
         con,
-        "SELECT count(*) AS n FROM reviews r JOIN book_authors ba ON ba.title = r.title"
-        " WHERE ba.author = ?",
-        [autor],
+        f"SELECT count(*) AS n FROM reviews r {ligacao.juncao.format(titulo='r.title')}"
+        f" WHERE {ligacao.filtro}",
+        [valor],
     )[0]["n"]
     if not _tabela_existe(con, "review_enriched"):
         return {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": totais}
 
     aspectos = _linhas(
         con,
-        """
+        f"""
         WITH base AS (
             SELECT re.review_id, re.aspects
             FROM review_enriched re
             JOIN enrichment_sample es ON es.review_id = re.review_id
-            JOIN book_authors ba ON ba.title = es.title
-            WHERE ba.author = ?
+            {ligacao.juncao.format(titulo="es.title")}
+            WHERE {ligacao.filtro}
         ),
         expandido AS (SELECT review_id, unnest(aspects) AS a FROM base),
         -- trecho e id numa agregação só: duas separadas não garantem vir da mesma linha
@@ -432,71 +458,34 @@ def aspectos_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str, A
                    count(*) AS n_mencoes,
                    100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
                        AS pct_negativo,
-                   any_value({'trecho': (a).evidence, 'review_id': review_id})
+                   any_value({{'trecho': (a).evidence, 'review_id': review_id}})
                        FILTER (WHERE (a).sentiment = 'negativo') AS negativo
             FROM expandido GROUP BY 1
         )
         SELECT aspecto, n_mencoes, pct_negativo,
                negativo.trecho AS exemplo_negativo,
                negativo.review_id AS exemplo_negativo_review_id
-        FROM agrupado ORDER BY n_mencoes DESC
+        FROM agrupado ORDER BY n_mencoes DESC, aspecto
         """,
-        [autor],
+        [valor],
     )
     analisadas = _linhas(
         con,
         "SELECT count(DISTINCT es.review_id) AS n FROM enrichment_sample es"
-        " JOIN book_authors ba ON ba.title = es.title WHERE ba.author = ?",
-        [autor],
+        f" {ligacao.juncao.format(titulo='es.title')} WHERE {ligacao.filtro}",
+        [valor],
     )[0]["n"]
     return {"aspectos": aspectos, "avaliacoes_analisadas": analisadas, "avaliacoes_totais": totais}
+
+
+def aspectos_do_autor(con: duckdb.DuckDBPyConnection, autor: str) -> dict[str, Any]:
+    """Aspectos mencionados nas avaliações dos livros de um autor."""
+    return _aspectos_da_entidade(con, _POR_AUTOR, autor)
 
 
 def aspectos_do_genero(con: duckdb.DuckDBPyConnection, categoria: str) -> dict[str, Any]:
-    """Mesma agregação de aspectos_do_autor, via books.categories em vez de book_authors."""
-    totais = _linhas(
-        con,
-        "SELECT count(*) AS n FROM reviews r JOIN books b ON b.title = r.title"
-        " WHERE list_contains(b.categories, ?)",
-        [categoria],
-    )[0]["n"]
-    if not _tabela_existe(con, "review_enriched"):
-        return {"aspectos": [], "avaliacoes_analisadas": 0, "avaliacoes_totais": totais}
-
-    aspectos = _linhas(
-        con,
-        """
-        WITH base AS (
-            SELECT re.review_id, re.aspects
-            FROM review_enriched re
-            JOIN enrichment_sample es ON es.review_id = re.review_id
-            JOIN books b ON b.title = es.title
-            WHERE list_contains(b.categories, ?)
-        ),
-        expandido AS (SELECT review_id, unnest(aspects) AS a FROM base),
-        agrupado AS (
-            SELECT (a).aspect AS aspecto,
-                   count(*) AS n_mencoes,
-                   100.0 * sum(CASE WHEN (a).sentiment = 'negativo' THEN 1 ELSE 0 END) / count(*)
-                       AS pct_negativo,
-                   any_value({'trecho': (a).evidence, 'review_id': review_id})
-                       FILTER (WHERE (a).sentiment = 'negativo') AS negativo
-            FROM expandido GROUP BY 1
-        )
-        SELECT aspecto, n_mencoes, pct_negativo,
-               negativo.trecho AS exemplo_negativo,
-               negativo.review_id AS exemplo_negativo_review_id
-        FROM agrupado ORDER BY n_mencoes DESC
-        """,
-        [categoria],
-    )
-    analisadas = _linhas(
-        con,
-        "SELECT count(DISTINCT es.review_id) AS n FROM enrichment_sample es"
-        " JOIN books b ON b.title = es.title WHERE list_contains(b.categories, ?)",
-        [categoria],
-    )[0]["n"]
-    return {"aspectos": aspectos, "avaliacoes_analisadas": analisadas, "avaliacoes_totais": totais}
+    """Aspectos mencionados nas avaliações dos livros de um gênero."""
+    return _aspectos_da_entidade(con, _POR_GENERO, categoria)
 
 
 def divergencia_nota_sentimento(con: duckdb.DuckDBPyConnection) -> dict[str, Any] | None:

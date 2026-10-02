@@ -1,5 +1,8 @@
 /data/
 /docs/
+# Exploração com saída embutida (6,5MB). Fica na máquina: a lógica final mora em src/ (AGENTS.md
+# §6), então o repositório não precisa carregar o peso dos notebooks nem os dados dentro deles.
+/notebooks/
 # user_hash inteiro de leitor real, exportado após aprovação humana (spec 04) — nunca versionar.
 /reports/exports/
 .env
@@ -9,6 +12,9 @@ __pycache__/
 *.pyc
 .ipynb_checkpoints/
 .venv
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 # Configurações do Claude Code ficam só locais — não expor no repositório.
 .claude/
 

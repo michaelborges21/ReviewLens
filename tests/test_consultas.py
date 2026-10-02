@@ -343,3 +343,41 @@ def test_numeros_gerais(con: duckdb.DuckDBPyConnection) -> None:
     assert numeros["reviews"] == 3
     assert numeros["livros"] == 2
     assert ranking_de_generos(con)[0]["categoria"] == "Ficção"
+
+
+def test_ranking_de_autores_desempata_por_nome() -> None:
+    """Empate sem desempate devolvia ordem arbitrária do DuckDB: medido em 7 ordens distintas
+    em 8 chamadas contra o banco real, trocando quem aparecia no topo a cada recarga."""
+    con = duckdb.connect(":memory:")
+    con.execute("""
+        CREATE TABLE author_stats AS SELECT * FROM (VALUES
+            ('Zelazny', 1, 10, 4.0, 4.0),
+            ('Asimov', 1, 10, 4.0, 4.0),
+            ('Morrison', 1, 10, 4.0, 4.0)
+        ) t(author, n_livros, n_reviews, nota_media, nota_bayesiana)
+    """)
+
+    nomes = [linha["author"] for linha in ranking_de_autores(con)]
+
+    assert nomes == ["Asimov", "Morrison", "Zelazny"]
+
+
+def test_aspectos_desempatam_por_nome_do_aspecto(con: duckdb.DuckDBPyConnection) -> None:
+    """Dois aspectos com a mesma contagem saem sempre na mesma ordem."""
+    con.execute("""
+        INSERT INTO review_enriched VALUES
+            ('2', [{'aspect': 'ritmo', 'sentiment': 'negativo', 'evidence': 'lento'},
+                   {'aspect': 'final', 'sentiment': 'negativo', 'evidence': 'fraco'}], NULL)
+    """)
+    con.execute("""
+        INSERT INTO enrichment_sample VALUES
+            (2, 'Dune', 3.0, TIMESTAMP '2011-05-01', 'meh', 'texto do meio argumentado', 'h2')
+    """)
+
+    empatados = [
+        a["aspecto"]
+        for a in aspectos_do_autor(con, "Frank Herbert")["aspectos"]
+        if a["n_mencoes"] == 1
+    ]
+
+    assert empatados == sorted(empatados)
