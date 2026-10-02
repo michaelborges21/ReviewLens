@@ -29,7 +29,7 @@ def _resposta(intencao: Intencao = Intencao.AUTOR) -> Resposta:
         intencao,
         "Performance de Frank Herbert.",
         "SELECT 1",
-        [{"ano": 2010, "n_reviews": 3, "nota_media": 4.5}],
+        [{"ano": 2010, "n_reviews": 3, "nota_media": 4.5, "helpful_ratio": 0.06}],
         aspectos=ASPECTOS,
     )
 
@@ -228,11 +228,15 @@ def test_numero_vindo_do_texto_do_prompt_nao_vale_como_dado(
 
 
 def test_numero_do_contexto_e_aceito(monkeypatch: pytest.MonkeyPatch) -> None:
-    """3 e 80 vêm da amostra enviada; 2010 e 4.50 vêm dos números. Nada disso é invenção."""
+    """3 e 80 vêm da amostra enviada; 2010 e 0.06 vêm dos números. Nada disso é invenção.
+
+    O decimal de exemplo é o helpful_ratio, não a nota: desde o qa_system 0.4.0 nota na prosa é
+    barrada de propósito, mesmo com lastro — quem cobre esse caso é test_guardrail_numeros.
+    """
     monkeypatch.setattr(
         narrador.ollama,
         "gerar_json",
-        lambda *a, **k: _narracao_com_texto("Em 2010, com nota 4,50, sobre 3 de 80 avaliações."),
+        lambda *a, **k: _narracao_com_texto("Em 2010, 0,06 útil, sobre 3 de 80 avaliações."),
     )
 
     assert narrador.narrar("como vai o autor?", _resposta()) is not None

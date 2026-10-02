@@ -17,9 +17,9 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run ruff check src tests app
-      - run: uv run ruff format --check src tests app
-      - run: uv run mypy src/
+      - run: uv run ruff check src tests app evals
+      - run: uv run ruff format --check src tests app evals
+      - run: uv run mypy          # escopo vem do pyproject.toml: src e app (ADR-018)
       - run: uv run pytest -q          # sem chamadas reais a LLM (fakes)
 
   # Dois jobs foram removidos e o CI ficou só com `quality`:

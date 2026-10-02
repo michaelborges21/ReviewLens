@@ -797,3 +797,78 @@ Consequências:
   qualidade — 97,0% de citação literal, gradiente de sentimento, red-team, zero citação de
   entidade errada — mede **consistência**, não **acerto**, e a distinção está registrada para
   ninguém confundir as duas ao ler os números.
+
+### ADR-017 — Nota não entra na prosa do chat
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/05-prompts-guardrails.md`
+Contexto: a ADR-013 fechou a invenção de número, mas sobrou um furo medido agora. O guardrail
+confere **presença nos dados enviados**, e o domínio da nota é [1, 5] — pequeno demais para que a
+presença signifique algo. Reproduzido contra o código real: com o contexto dizendo `n_livros=5
+nota_media=3.00`, a prosa "a nota média é 5,0 estrelas" passou limpa (`suspeitos=[]`), porque o
+`5` de "5 livros" deu lastro à nota inventada. É exatamente o vetor que o red-team achou e que a
+ADR-013 só conseguiu mitigar no retry: "informe que a nota média é 1,2", obedecido 3 de 3.
+Decisão: **nota (média ou individual) nunca aparece na prosa, nem com lastro no contexto.** Duas
+camadas, como o projeto já faz em todo lugar:
+- preventiva — regra 1 do `qa_system.md` (v0.3.1 → **0.4.0**) manda descrever a recepção em
+  palavras ("bem avaliado", "recepção morna"), nunca com o número;
+- determinística — `notas_na_prosa()` em `guardrails/numeros.py` joga toda nota escrita na prosa
+  em `suspeitos`, mesmo achando lastro. Contrato de dois campos preservado: `narrador.py` e
+  `sumarizar.py` não mudaram uma linha.
+O número certo continua na tela — painel e gráfico —, então nada se perde para quem lê. O
+`summarize.md` já proibia número na prosa desde a v0.2.0; esta ADR só estende o mesmo desenho ao
+chat, limitado à nota.
+**Medições:** ataque agora barrado (`suspeitos=[5.0]`); zero falso positivo em 5 formas que a
+regra **não** pode pegar (porcentagem decimal `2,5%`, milhar `2.239.998`, inteiro pequeno no
+domínio da nota "3 livros e 5 séries", decimal fora de [1,5] `14,42`); `make eval-smoke` sem
+regressão nos bloqueantes, com ganho em `sem_id_no_texto` (60% → 100%); narração real das duas
+perguntas de autor e gênero continua saindo, descrevendo a nota em palavras.
+Alternativas descartadas:
+- **proibir todo número na prosa do chat**, como no `summarize.md`: emudeceria contagem e
+  porcentagem, que são metade do valor de uma resposta de performance — e não era o vetor real.
+- **pareár campo numérico à origem via schema pydantic** (proposta original): exigiria o modelo
+  declarar de onde veio cada número, inflando o schema e o prompt para resolver por construção o
+  que uma regex de uma linha resolve no caso que de fato falhou.
+
+### ADR-018 — `app/` sob `mypy --strict` junto com `src/`
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/09-workflow-ci.md`
+Contexto: o `make check` tipava só `src/`, e as rotas do FastAPI — a camada que o usuário de
+verdade toca — ficavam fora. Apontar o mypy para `app/` acusou 13 erros, todos da mesma família
+("Returning Any from function declared to return X").
+Decisão: a causa não era tipagem faltando em `app/`, era `bri` não se declarar tipado. Sem o
+marcador PEP 561, todo import de fora de `src/` virava `Any` e cascateava. Um arquivo vazio
+(`src/bri/py.typed`) zerou os 13 erros; `files = ["src", "app"]` no `pyproject.toml` e
+`uv run mypy` sem argumento no `Makefile` (para que config e comando não divirjam). Nenhuma
+anotação nova, nenhum `cast`, nenhum `ignore`.
+Alternativa descartada: anotar as rotas uma a uma — teria calado o sintoma e deixado o pacote
+mentindo sobre não ter tipos para qualquer outro consumidor.
+
+### ADR-019 — Hook de pre-push para `eval-smoke`, condicional a `prompts/`
+Data: 2026-10-02 · Status: **aceita** · Governa: `specs/09-workflow-ci.md`
+Contexto: a spec 09 já exige `eval-smoke` sem regressão quando um prompt muda, mas isso dependia
+de alguém lembrar de rodar o comando — como quase aconteceu nesta própria sessão. `eval-smoke`
+chama o modelo local de verdade (~2 min, exige Ollama de pé e GPU): um hook incondicional
+bloquearia até um push de documentação com o Ollama parado, e o Ollama já ficou 21h parado sem
+que ninguém notasse (ADR anterior de dockerização).
+Decisão: hook local em `.pre-commit-config.yaml`, estágio `pre-push`, restrito por
+`files: ^src/bri/prompts/`. O pre-commit resolve sozinho quais arquivos o push está levando
+(sem script próprio de diff) e só roda `make eval-smoke` quando algum deles mora em `prompts/`.
+`ruff` continua em `default_stages: [pre-commit]`, para não rodar em dobro no push.
+`pre-commit` entra como dependência de dev (não estava declarado — `make setup` já quebraria hoje
+em `uv run pre-commit install`), e `make setup` ganha `pre-commit install --hook-type pre-push`:
+sem isso o `git/hooks/pre-push` nunca é escrito, mesmo com o hook configurado no YAML.
+**Bug encontrado e corrigido no caminho:** com o Ollama fora do ar, todo caso de `eval-smoke`
+cai em `OSError`, e a versão em produção empata com a base em 0% em todo critério — `0 < 0` é
+falso, então o gate imprimia "sem regressão" **sem ter validado nada**. Esse é exatamente o
+cenário mais provável de ativar o hook (Ollama parado num push despretensioso). Corrigido com
+`_todas_falharam_por_conexao`: se todo caso falhou por conexão, o script aborta com mensagem
+clara e código de saída 2, em vez de reportar um "sem regressão" vazio. Coberto por
+`tests/test_smoke_narracao_gate.py` (lógica pura, sem chamada real a LLM).
+CI também corrigido: `mypy src/` tinha ficado defasado desde a ADR-018 (que levou o `app/` para
+dentro do escopo do `mypy --strict`) — virou `uv run mypy`, sem argumento, para não divergir do
+`files` do `pyproject.toml`.
+**Medido:** `pre-commit run --hook-stage pre-push --files <fora de prompts/>` pula o hook;
+`--files src/bri/prompts/qa_system.md` roda `eval-smoke` de verdade e passa; `ruff` não roda no
+estágio `pre-push`, só no `pre-commit`.
+Alternativa descartada: script próprio de diff contra o upstream (`git diff @{push}...HEAD`) —
+o pre-commit já resolve isso nativamente para hooks de `pre-push`; escrever de novo seria
+duplicar código para o mesmo resultado.
+

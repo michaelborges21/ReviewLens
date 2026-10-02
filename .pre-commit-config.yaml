@@ -1,3 +1,5 @@
+default_stages: [pre-commit]
+
 repos:
   - repo: local
     hooks:
@@ -11,3 +13,10 @@ repos:
         entry: uv run ruff format --check
         language: system
         types: [python]
+      - id: eval-smoke
+        name: eval-smoke (somente se o push alterar prompts)
+        entry: make eval-smoke
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+        files: ^src/bri/prompts/

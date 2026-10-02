@@ -4,10 +4,11 @@
 setup:
 	uv sync
 	uv run pre-commit install
+	uv run pre-commit install --hook-type pre-push
 
 check:
-	uv run ruff check src tests app
-	uv run ruff format --check src tests app
+	uv run ruff check src tests app evals
+	uv run ruff format --check src tests app evals
 	uv run mypy src/
 	uv run pytest -q
 

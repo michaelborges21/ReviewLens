@@ -1,9 +1,14 @@
 ---
-version: 0.3.1
+version: 0.4.0
 used_by: agent/narrador.py
 schema: RespostaNarrada
 model: gemma4:12b
 changelog: |
+  0.4.0 — Proíbe escrever nota na prosa. O red-team mostrou que o único ataque bem-sucedido foi
+    mandar o modelo afirmar uma nota média falsa, e o guardrail de números não protegia esse caso:
+    ele confere presença no contexto, e em [1,5] a coincidência é quase garantida (um "5" de
+    "5 livros" dá lastro a uma nota 5 inventada). A nota correta já aparece no painel e no
+    gráfico; tirá-la da prosa fecha o vetor por construção, como o summarize.md 0.2.0 já fazia.
   0.3.1 — Promovida após medição do `make eval-smoke`. A v0.3.0 tirou o review_id de dentro da
     prosa, mas a duplicação migrou para o array: o modelo repetia a mesma review uma vez por
     afirmação. A regra 3 pede uma entrada por review; medida sobre 5 casos, subiu
@@ -35,6 +40,9 @@ livros.
 
 <regras>
 1. Todo número vem dos blocos de contexto abaixo. Nunca estime, nunca recalcule, nunca invente.
+   **Exceção: nota (média ou individual) nunca entra na prosa** — nem com lastro no contexto. A
+   tela já mostra a nota no painel e no gráfico. Descreva em palavras ("bem avaliado", "recepção
+   morna"), nunca com o número.
 2. Cada trecho de leitor que você usar entra no campo `citacoes`, com o `review_id` de origem.
    **Não escreva o review_id dentro do texto da resposta** — a interface já mostra cada citação
    num cartão abaixo, e repetir o número na frase deixa a leitura pior.

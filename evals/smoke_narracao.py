@@ -104,11 +104,19 @@ def _rodar_caso(prompt: prompts.Prompt, pergunta: str, resposta: Resposta) -> di
         )
     except OSError as erro:
         print(f"  modelo inacessível: {erro}", flush=True)
-        return {"segundos": 0.0, "checagens": {"schema_valido": False}}
+        return {"segundos": 0.0, "checagens": {"schema_valido": False}, "falha_conexao": True}
     return {
         "segundos": round(time.monotonic() - inicio, 1),
         "checagens": _checar(bruto, ids_enviados, e_injecao=pergunta == "[injeção]"),
     }
+
+
+def _todas_falharam_por_conexao(medido: dict[str, list[dict[str, Any]]]) -> bool:
+    """Sem isto, Ollama fora do ar dava 0% nos dois lados, 0 < 0 era falso, e o gate acusava
+    'sem regressão' com nada de fato validado — achado ao projetar o hook de pre-push (ADR-019),
+    cenário em que o modelo indisponível vira o caso comum, não a exceção."""
+    casos = [caso for resultados in medido.values() for caso in resultados]
+    return bool(casos) and all(caso.get("falha_conexao") for caso in casos)
 
 
 def main() -> int:
@@ -132,6 +140,11 @@ def main() -> int:
             resultados.append(saida)
         medido[rotulo] = resultados
 
+    if _todas_falharam_por_conexao(medido):
+        print("\nOllama indisponível: nenhum caso rodou de verdade, gate não validou nada.")
+        print("Suba o Ollama local e rode `make eval-smoke` de novo antes do push.")
+        return 2
+
     return _comparar(medido)
 
 
@@ -144,7 +157,9 @@ def _comparar(medido: dict[str, list[dict[str, Any]]]) -> int:
         for criterio in criterios:
             avaliados = [c["checagens"] for c in resultados if criterio in c["checagens"]]
             if avaliados:
-                taxas[rotulo][criterio] = 100.0 * sum(c[criterio] for c in avaliados) / len(avaliados)
+                taxas[rotulo][criterio] = (
+                    100.0 * sum(c[criterio] for c in avaliados) / len(avaliados)
+                )
 
     rotulos = list(medido)
     print("\n=== acerto por critério (bloqueia o gate / apenas informativo) ===")
@@ -158,7 +173,9 @@ def _comparar(medido: dict[str, list[dict[str, Any]]]) -> int:
 
     base, producao = rotulos[0], rotulos[-1]
     regressoes = [
-        c for c in criterios if c in BLOQUEANTES and taxas[producao].get(c, 0) < taxas[base].get(c, 0)
+        c
+        for c in criterios
+        if c in BLOQUEANTES and taxas[producao].get(c, 0) < taxas[base].get(c, 0)
     ]
     destino = Path("reports/evals")
     destino.mkdir(parents=True, exist_ok=True)

@@ -26,6 +26,7 @@ dev = [
     "mypy>=1.13",
     "pytest>=8.3",
     "httpx>=0.28",
+    "pre-commit>=4.0",
 ]
 
 [build-system]
@@ -44,14 +45,17 @@ src = ["src"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["bri", "app"]
+known-first-party = ["bri", "app", "evals"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/test_ingest.py" = ["E501"]
 
 [tool.mypy]
 strict = true
-files = ["src"]
+# app/ entra junto: o marcador src/bri/py.typed (PEP 561) faz o mypy enxergar os tipos do
+# pacote quando importado de fora de src/ — sem ele, todo import de bri virava Any e
+# cascateava 13 erros de "Returning Any" nas rotas.
+files = ["src", "app"]
 
 # wordcloud não publica stubs de tipo (ADR: nuvem de palavras por gênero, 2026-09-30). Escopado
 # só a essa biblioteca — o resto do projeto continua sob --strict sem exceção.
